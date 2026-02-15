@@ -1,0 +1,10 @@
+{
+  "name": "Shifm シフト管理",
+  "short_name": "Shifm",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7f1",
+  "theme_color": "#1e8f6e",
+  "lang": "ja"
+}

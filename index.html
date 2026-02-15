@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1e8f6e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>個人バイトシフト管理</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape bg-shape-a"></div>
+    <div class="bg-shape bg-shape-b"></div>
+
+    <main class="container">
+      <header class="app-header">
+        <h1>個人バイトシフト管理</h1>
+        <p>カレンダーで管理しつつ、給与を自動計算</p>
+      </header>
+
+      <nav class="view-nav" aria-label="機能ナビゲーション">
+        <button class="view-tab is-active" type="button" data-view-target="shift">シフト</button>
+        <button class="view-tab" type="button" data-view-target="summary">月次サマリー</button>
+        <button class="view-tab" type="button" data-view-target="settings">設定</button>
+        <button class="view-tab" type="button" data-view-target="sync">同期</button>
+      </nav>
+
+      <section class="view-section is-active" data-view="shift">
+        <div class="view-layout shift-layout">
+          <section class="panel calendar-panel">
+            <div class="calendar-head">
+              <button id="prevMonth" type="button" aria-label="前の月">◀</button>
+              <h2 id="monthLabel"></h2>
+              <div class="calendar-head-actions">
+                <button id="jumpToday" type="button" aria-label="今日へ移動">今日</button>
+                <button id="nextMonth" type="button" aria-label="次の月">▶</button>
+              </div>
+            </div>
+            <div id="calendarGrid" class="calendar-grid" aria-live="polite"></div>
+          </section>
+
+          <section class="panel form-panel">
+            <h3 id="selectedDateLabel">日付を選択してください</h3>
+            <p id="editingStatus" class="editing-status">新規シフトを入力中</p>
+            <form id="shiftForm">
+              <input id="editingShiftId" name="editingShiftId" type="hidden" />
+              <div class="field-row split">
+                <div>
+                  <label for="workplaceMaster">勤務先マスタ</label>
+                  <select id="workplaceMaster" name="workplaceMaster">
+                    <option value="">未選択</option>
+                  </select>
+                </div>
+                <div class="field-row-inline">
+                  <button id="applyMasterToForm" type="button">マスタ反映</button>
+                </div>
+              </div>
+              <div class="field-row">
+                <label for="workplace">勤務先</label>
+                <input id="workplace" name="workplace" type="text" placeholder="例: カフェA" list="workplaceSuggestions" />
+                <datalist id="workplaceSuggestions"></datalist>
+              </div>
+              <div class="field-row split">
+                <div>
+                  <label for="shiftLine">ライン</label>
+                  <select id="shiftLine" name="shiftLine">
+                    <option value="">未選択</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="shiftPattern">シフトパターン</label>
+                  <select id="shiftPattern" name="shiftPattern">
+                    <option value="">未選択</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row split">
+                <div>
+                  <label for="startTime">開始</label>
+                  <input id="startTime" name="startTime" type="time" required />
+                </div>
+                <div>
+                  <label for="endTime">終了</label>
+                  <input id="endTime" name="endTime" type="time" required />
+                </div>
+              </div>
+              <div class="field-row split">
+                <div>
+                  <label for="breakMinutes">休憩(分)</label>
+                  <input id="breakMinutes" name="breakMinutes" type="number" min="0" step="1" value="0" />
+                </div>
+                <div>
+                  <label for="hourlyRate">時給(円)</label>
+                  <input id="hourlyRate" name="hourlyRate" type="number" min="0" step="1" required />
+                </div>
+              </div>
+              <div class="field-row">
+                <label for="transport">交通費(円)</label>
+                <input id="transport" name="transport" type="number" min="0" step="1" value="0" />
+              </div>
+              <div class="field-row">
+                <label for="memo">メモ</label>
+                <input id="memo" name="memo" type="text" placeholder="例: まかないあり" />
+              </div>
+              <div class="actions">
+                <button type="submit" class="primary">保存</button>
+                <button id="newShift" type="button">新規入力</button>
+                <button id="deleteShift" type="button" class="danger">削除</button>
+              </div>
+              <details class="advanced-block">
+                <summary>詳細操作（連携・補助）</summary>
+                <div class="actions advanced-actions">
+                  <button id="saveAsMaster" type="button">勤務先マスタに保存</button>
+                  <button id="addGoogleCalendar" type="button">Google Calendar登録</button>
+                  <button id="addDayGoogleCalendar" type="button">当日分をGoogle登録</button>
+                </div>
+              </details>
+
+              <details class="advanced-block">
+                <summary>定型シフト一括登録（週次）</summary>
+                <div id="bulkShiftForm" class="sub-form">
+                  <div class="field-row split">
+                    <div>
+                      <label for="bulkWorkplaceMaster">勤務先マスタ</label>
+                      <select id="bulkWorkplaceMaster" name="bulkWorkplaceMaster">
+                        <option value="">未選択</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="bulkWorkplace">勤務先</label>
+                      <input id="bulkWorkplace" name="bulkWorkplace" type="text" placeholder="例: カフェA" />
+                    </div>
+                  </div>
+
+                  <div class="field-row split">
+                    <div>
+                      <label for="bulkStartTime">開始</label>
+                      <input id="bulkStartTime" name="bulkStartTime" type="time" />
+                    </div>
+                    <div>
+                      <label for="bulkEndTime">終了</label>
+                      <input id="bulkEndTime" name="bulkEndTime" type="time" />
+                    </div>
+                  </div>
+
+                  <div class="field-row split">
+                    <div>
+                      <label for="bulkBreakMinutes">休憩(分)</label>
+                      <input id="bulkBreakMinutes" name="bulkBreakMinutes" type="number" min="0" step="1" value="0" />
+                    </div>
+                    <div>
+                      <label for="bulkHourlyRate">時給(円)</label>
+                      <input id="bulkHourlyRate" name="bulkHourlyRate" type="number" min="0" step="1" />
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <label for="bulkTransport">交通費(円)</label>
+                    <input id="bulkTransport" name="bulkTransport" type="number" min="0" step="1" value="0" />
+                  </div>
+
+                  <div class="field-row">
+                    <label>曜日選択</label>
+                    <div class="weekday-checks">
+                      <label><input type="checkbox" name="bulkWeekday" value="0" />日</label>
+                      <label><input type="checkbox" name="bulkWeekday" value="1" checked />月</label>
+                      <label><input type="checkbox" name="bulkWeekday" value="2" />火</label>
+                      <label><input type="checkbox" name="bulkWeekday" value="3" checked />水</label>
+                      <label><input type="checkbox" name="bulkWeekday" value="4" />木</label>
+                      <label><input type="checkbox" name="bulkWeekday" value="5" checked />金</label>
+                      <label><input type="checkbox" name="bulkWeekday" value="6" />土</label>
+                    </div>
+                  </div>
+
+                  <div class="field-row split">
+                    <div>
+                      <label for="bulkStartDate">開始日</label>
+                      <input id="bulkStartDate" name="bulkStartDate" type="date" />
+                    </div>
+                    <div>
+                      <label for="bulkEndDate">終了日</label>
+                      <input id="bulkEndDate" name="bulkEndDate" type="date" />
+                    </div>
+                  </div>
+
+                  <div class="field-row">
+                    <label>
+                      <input id="bulkSkipExisting" name="bulkSkipExisting" type="checkbox" checked />
+                      同一シフト（勤務先・開始終了時刻）が既にある日は追加しない
+                    </label>
+                  </div>
+
+                  <div class="actions">
+                    <button id="applyBulkShift" type="button" class="primary">一括登録</button>
+                  </div>
+                  <p id="bulkShiftStatus" class="section-note"></p>
+                </div>
+              </details>
+            </form>
+            <div class="day-list-wrap">
+              <div class="day-list-head">
+                <h4>この日のシフト</h4>
+              </div>
+              <ul id="dayShiftList" class="day-shift-list"></ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view-section" data-view="summary">
+        <section class="panel summary-panel">
+          <div class="summary-head">
+            <div>
+              <h3>月次サマリー</h3>
+              <p id="summaryMonthLabel" class="section-note"></p>
+            </div>
+            <div class="summary-controls">
+              <button id="summaryPrevMonth" type="button" aria-label="サマリー前月" class="mini-btn">◀</button>
+              <button id="summaryNextMonth" type="button" aria-label="サマリー翌月" class="mini-btn">▶</button>
+              <button id="exportCsv" type="button">CSV出力</button>
+            </div>
+          </div>
+          <div class="field-row summary-filter-row">
+            <label for="summaryMasterFilter">表示対象の勤務先</label>
+            <select id="summaryMasterFilter" name="summaryMasterFilter">
+              <option value="all">全勤務先</option>
+            </select>
+          </div>
+          <div class="cards">
+            <article class="card">
+              <p>勤務日数</p>
+              <strong id="totalDays">0 日</strong>
+            </article>
+            <article class="card">
+              <p>総労働時間</p>
+              <strong id="totalHours">0.0 時間</strong>
+            </article>
+            <article class="card">
+              <p>支給見込み(総額)</p>
+              <strong id="grossPay">0 円</strong>
+            </article>
+            <article class="card">
+              <p>手取り見込み</p>
+              <strong id="netPay">0 円</strong>
+            </article>
+          </div>
+          <div class="list-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>日付</th>
+                  <th>勤務先</th>
+                  <th>勤務時間</th>
+                  <th>支給額</th>
+                </tr>
+              </thead>
+              <tbody id="monthlyRows"></tbody>
+            </table>
+          </div>
+          <div class="list-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>勤務先</th>
+                  <th>勤務日数</th>
+                  <th>労働時間</th>
+                  <th>支給総額</th>
+                </tr>
+              </thead>
+              <tbody id="workplaceSummaryRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="view-section" data-view="settings">
+        <div class="view-layout settings-layout">
+          <section class="panel settings-panel">
+            <h3>給与設定</h3>
+            <p class="section-note">日々の計算ルールを管理します。</p>
+            <form id="settingsForm">
+              <div class="field-row split">
+                <div>
+                  <label for="defaultHourlyRate">デフォルト時給(円)</label>
+                  <input id="defaultHourlyRate" name="defaultHourlyRate" type="number" min="0" step="1" />
+                </div>
+                <div>
+                  <label for="overtimeThreshold">残業開始(時間/日)</label>
+                  <input id="overtimeThreshold" name="overtimeThreshold" type="number" min="0" step="0.5" />
+                </div>
+              </div>
+              <div class="field-row split">
+                <div>
+                  <label for="overtimeMultiplier">残業倍率</label>
+                  <input id="overtimeMultiplier" name="overtimeMultiplier" type="number" min="1" step="0.05" />
+                </div>
+                <div>
+                  <label for="taxRate">控除率(%)</label>
+                  <input id="taxRate" name="taxRate" type="number" min="0" max="100" step="0.1" />
+                </div>
+              </div>
+              <div class="actions">
+                <button type="submit" class="primary">設定を保存</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel master-panel">
+            <details class="advanced-block">
+              <summary>勤務先マスタ管理（低頻度）</summary>
+              <form id="masterForm">
+                <input id="masterId" name="masterId" type="hidden" />
+                <div class="field-row">
+                  <label for="masterName">勤務先名</label>
+                  <input id="masterName" name="masterName" type="text" placeholder="例: カフェA" required />
+                </div>
+                <div class="field-row split">
+                  <div>
+                    <label for="masterHourlyRate">既定時給(円)</label>
+                    <input id="masterHourlyRate" name="masterHourlyRate" type="number" min="0" step="1" required />
+                  </div>
+                  <div>
+                    <label for="masterTransport">既定交通費(円)</label>
+                    <input id="masterTransport" name="masterTransport" type="number" min="0" step="1" value="0" />
+                  </div>
+                </div>
+                <div class="field-row split">
+                  <div>
+                    <label for="masterOvertimeThreshold">残業開始(時間/日)</label>
+                    <input id="masterOvertimeThreshold" name="masterOvertimeThreshold" type="number" min="0" step="0.5" />
+                  </div>
+                  <div>
+                    <label for="masterOvertimeMultiplier">残業倍率</label>
+                    <input id="masterOvertimeMultiplier" name="masterOvertimeMultiplier" type="number" min="1" step="0.05" />
+                  </div>
+                </div>
+                <div class="field-row">
+                  <label for="masterTaxRate">控除率(%)</label>
+                  <input id="masterTaxRate" name="masterTaxRate" type="number" min="0" max="100" step="0.1" />
+                </div>
+                <div class="actions">
+                  <button type="submit" class="primary">マスタ保存</button>
+                  <button id="masterNew" type="button">新規</button>
+                  <button id="masterDelete" type="button" class="danger">削除</button>
+                </div>
+                <details class="advanced-block">
+                  <summary>ライン・シフトパターン設定</summary>
+                  <input id="patternId" name="patternId" type="hidden" />
+                  <div class="field-row split">
+                    <div>
+                      <label for="patternLineName">ライン名</label>
+                      <input id="patternLineName" name="patternLineName" type="text" placeholder="例: レジ" />
+                    </div>
+                    <div>
+                      <label for="patternName">パターン名</label>
+                      <input id="patternName" name="patternName" type="text" placeholder="例: 早番A" />
+                    </div>
+                  </div>
+                  <div class="field-row split">
+                    <div>
+                      <label for="patternStartTime">開始</label>
+                      <input id="patternStartTime" name="patternStartTime" type="time" />
+                    </div>
+                    <div>
+                      <label for="patternEndTime">終了</label>
+                      <input id="patternEndTime" name="patternEndTime" type="time" />
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <label for="patternBreakMinutes">休憩(分)</label>
+                    <input id="patternBreakMinutes" name="patternBreakMinutes" type="number" min="0" step="1" value="0" />
+                  </div>
+                  <div class="actions">
+                    <button id="patternSave" type="button">パターン保存</button>
+                    <button id="patternNew" type="button">新規</button>
+                    <button id="patternDelete" type="button" class="danger">削除</button>
+                  </div>
+                  <ul id="patternList" class="pattern-list"></ul>
+                </details>
+                <ul id="masterList" class="master-list"></ul>
+              </form>
+            </details>
+          </section>
+        </div>
+      </section>
+
+      <section class="view-section" data-view="sync">
+        <section class="panel sync-panel">
+          <h3>端末同期 (GitHub Gist)</h3>
+          <p class="section-note">通常は「クラウドへ保存」「クラウドから取得」だけ使えば十分です。</p>
+          <div class="actions">
+            <button id="pushCloud" type="button">クラウドへ保存</button>
+            <button id="pullCloud" type="button">クラウドから取得</button>
+          </div>
+          <p id="syncStatus">同期未設定</p>
+          <details class="advanced-block">
+            <summary>同期詳細設定（Token/Gist/差分マージ）</summary>
+            <form id="syncForm">
+              <div class="field-row">
+                <label for="githubToken">GitHub Personal Access Token</label>
+                <input id="githubToken" name="githubToken" type="password" autocomplete="off" />
+              </div>
+              <div class="field-row split">
+                <div>
+                  <label for="gistId">Gist ID</label>
+                  <input id="gistId" name="gistId" type="text" placeholder="32文字程度のID" autocomplete="off" />
+                </div>
+                <div>
+                  <label for="gistFilename">ファイル名</label>
+                  <input id="gistFilename" name="gistFilename" type="text" value="shifm-data.json" />
+                </div>
+              </div>
+              <div class="field-row">
+                <label>
+                  <input id="autoSync" name="autoSync" type="checkbox" />
+                  保存時に自動同期する
+                </label>
+              </div>
+              <div class="actions">
+                <button type="submit" class="primary">同期設定を保存</button>
+                <button id="pullCloudMerge" type="button">差分マージ取得</button>
+              </div>
+            </form>
+          </details>
+        </section>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
