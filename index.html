@@ -391,6 +391,12 @@
           <h3>端末同期 (GitHub Gist)</h3>
           <p class="section-note">通常は「クラウドへ保存」「クラウドから取得」だけ使えば十分です。</p>
           <div class="actions">
+            <button id="exportBackup" type="button">バックアップ書き出し</button>
+            <button id="importBackup" type="button">バックアップ読み込み</button>
+          </div>
+          <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
+          <p class="section-note">GitHub設定なしで使う場合は、この2ボタンで端末間移行できます。</p>
+          <div class="actions">
             <button id="pushCloud" type="button">クラウドへ保存</button>
             <button id="pullCloud" type="button">クラウドから取得</button>
           </div>

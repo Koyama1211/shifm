@@ -129,6 +129,9 @@
     gistId: document.getElementById("gistId"),
     gistFilename: document.getElementById("gistFilename"),
     autoSync: document.getElementById("autoSync"),
+    exportBackup: document.getElementById("exportBackup"),
+    importBackup: document.getElementById("importBackup"),
+    backupFileInput: document.getElementById("backupFileInput"),
     pushCloud: document.getElementById("pushCloud"),
     pullCloud: document.getElementById("pullCloud"),
     pullCloudMerge: document.getElementById("pullCloudMerge"),
@@ -438,6 +441,18 @@
       state.sync.autoSync = refs.autoSync.checked;
       persistState();
       setSyncStatus("同期設定を保存しました。");
+    });
+
+    refs.exportBackup.addEventListener("click", () => {
+      exportBackupFile();
+    });
+
+    refs.importBackup.addEventListener("click", () => {
+      refs.backupFileInput.click();
+    });
+
+    refs.backupFileInput.addEventListener("change", async () => {
+      await importBackupFromFile();
     });
 
     refs.pushCloud.addEventListener("click", async () => {
@@ -1858,15 +1873,7 @@
       const config = requireSyncConfig();
       setSyncStatus("クラウドへ同期中...");
 
-      const payload = {
-        version: 4,
-        updatedAt: new Date().toISOString(),
-        data: {
-          shifts: state.shifts,
-          masters: state.masters,
-          settings: state.settings
-        }
-      };
+      const payload = buildSyncPayload();
 
       const response = await fetch(`https://api.github.com/gists/${config.gistId}`, {
         method: "PATCH",
@@ -2013,6 +2020,83 @@
     }
 
     return sortMasters(Array.from(byName.values()));
+  }
+
+  function buildSyncPayload() {
+    return {
+      version: 5,
+      updatedAt: new Date().toISOString(),
+      data: {
+        shifts: state.shifts,
+        masters: state.masters,
+        settings: state.settings
+      }
+    };
+  }
+
+  function exportBackupFile() {
+    const payload = buildSyncPayload();
+    const jsonText = JSON.stringify(payload, null, 2);
+    const blob = new Blob([jsonText], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const now = new Date();
+    const stamp =
+      `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}` +
+      `-${pad2(now.getHours())}${pad2(now.getMinutes())}`;
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `shifm-backup-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    setSyncStatus("バックアップを書き出しました。");
+  }
+
+  async function importBackupFromFile() {
+    const file = refs.backupFileInput.files && refs.backupFileInput.files[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const rawData = isObject(parsed) && isObject(parsed.data) ? parsed.data : parsed;
+      const incomingShifts = normalizeShiftsMap(rawData.shifts);
+      const incomingMasters = normalizeMasters(rawData.masters);
+      const incomingSettings = isObject(rawData.settings) ? rawData.settings : {};
+
+      if (!window.confirm("現在データをバックアップ内容で上書きしますか？")) {
+        setSyncStatus("バックアップ読み込みをキャンセルしました。");
+        return;
+      }
+
+      state.shifts = incomingShifts;
+      state.masters = incomingMasters;
+      state.settings = {
+        ...defaultState.settings,
+        ...state.settings,
+        ...incomingSettings
+      };
+      persistState();
+
+      selectedShiftId = null;
+      selectedMasterId = null;
+      selectedPatternId = null;
+      renderAll();
+
+      setSyncStatus("バックアップを読み込みました。");
+      alert("バックアップを読み込みました。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "バックアップ読み込みに失敗しました。";
+      setSyncStatus(message);
+      alert(message);
+    } finally {
+      refs.backupFileInput.value = "";
+    }
   }
 
   function queueAutoSync(reason) {
