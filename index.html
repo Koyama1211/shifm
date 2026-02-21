@@ -56,6 +56,27 @@
           </div>
           <p class="section-note">他人に共有しないでください。</p>
         </details>
+        <details class="advanced-block">
+          <summary>クラウドからログイン情報を復元</summary>
+          <p class="section-note">復元コードを使わず、同期用Gistからログイン情報を復元します。</p>
+          <div class="field-row">
+            <label for="authCloudToken">GitHub Personal Access Token</label>
+            <input id="authCloudToken" name="authCloudToken" type="password" autocomplete="off" />
+          </div>
+          <div class="field-row split">
+            <div>
+              <label for="authCloudGistId">Gist ID</label>
+              <input id="authCloudGistId" name="authCloudGistId" type="text" autocomplete="off" />
+            </div>
+            <div>
+              <label for="authCloudFilename">ファイル名</label>
+              <input id="authCloudFilename" name="authCloudFilename" type="text" value="shifm-data.json" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="authCloudRestore" type="button">クラウドから復元</button>
+          </div>
+        </details>
       </div>
     </section>
 

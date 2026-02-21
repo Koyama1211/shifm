@@ -62,6 +62,10 @@
     authTransferCode: document.getElementById("authTransferCode"),
     generateAuthTransfer: document.getElementById("generateAuthTransfer"),
     applyAuthTransfer: document.getElementById("applyAuthTransfer"),
+    authCloudToken: document.getElementById("authCloudToken"),
+    authCloudGistId: document.getElementById("authCloudGistId"),
+    authCloudFilename: document.getElementById("authCloudFilename"),
+    authCloudRestore: document.getElementById("authCloudRestore"),
     currentUserLabel: document.getElementById("currentUserLabel"),
     logoutButton: document.getElementById("logoutButton"),
     viewTabs: Array.from(document.querySelectorAll(".view-tab")),
@@ -215,6 +219,10 @@
     refs.applyAuthTransfer.addEventListener("click", () => {
       applyAuthTransferCode();
     });
+
+    refs.authCloudRestore.addEventListener("click", async () => {
+      await restoreAuthFromCloud();
+    });
   }
 
   async function submitAuth() {
@@ -295,6 +303,15 @@
     if (authProfile && authProfile.userId && isLogin) {
       refs.authUserId.value = authProfile.userId;
     }
+    if (!refs.authCloudToken.value && state.sync.githubToken) {
+      refs.authCloudToken.value = state.sync.githubToken;
+    }
+    if (!refs.authCloudGistId.value && state.sync.gistId) {
+      refs.authCloudGistId.value = state.sync.gistId;
+    }
+    if (!refs.authCloudFilename.value) {
+      refs.authCloudFilename.value = state.sync.gistFilename || "shifm-data.json";
+    }
   }
 
   async function generateAuthTransferCode() {
@@ -362,6 +379,64 @@
       const message = error instanceof Error ? error.message : "認証復元コードの適用に失敗しました。";
       alert(message);
       setAuthStatus(message);
+    }
+  }
+
+  async function restoreAuthFromCloud() {
+    const githubToken = refs.authCloudToken.value.trim();
+    const gistId = refs.authCloudGistId.value.trim();
+    const gistFilename = refs.authCloudFilename.value.trim() || "shifm-data.json";
+
+    if (!githubToken || !gistId) {
+      setAuthStatus("Token と Gist ID を入力してください。");
+      return;
+    }
+
+    try {
+      setAuthStatus("クラウドから認証情報を取得中...");
+      const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${githubToken}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`クラウド取得失敗 (${response.status})`);
+      }
+
+      const gist = await response.json();
+      const file = gist.files && gist.files[gistFilename];
+      if (!file || typeof file.content !== "string") {
+        throw new Error("指定ファイルがGistに見つかりません。");
+      }
+
+      const parsed = JSON.parse(file.content);
+      const remoteData = parsed && parsed.data ? parsed.data : {};
+      const remoteProfile = normalizeAuthProfileObject(remoteData.authProfile);
+      if (!remoteProfile) {
+        throw new Error("クラウドにログイン情報がありません。登録済み端末で一度クラウド保存を実行してください。");
+      }
+
+      authProfile = remoteProfile;
+      persistAuthProfile(authProfile);
+      authMode = "login";
+      authenticatedUserId = "";
+      refs.authUserId.value = authProfile.userId;
+      refs.authPassword.value = "";
+      refs.authPasswordConfirm.value = "";
+      renderAuthView();
+
+      state.sync.githubToken = githubToken;
+      state.sync.gistId = gistId;
+      state.sync.gistFilename = gistFilename;
+      state.sync.userId = authProfile.userId;
+      persistState();
+
+      setAuthStatus("クラウドからログイン情報を復元しました。ログインしてください。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "クラウド復元に失敗しました。";
+      setAuthStatus(message);
+      alert(message);
     }
   }
 
@@ -2639,6 +2714,7 @@
       const remoteShifts = normalizeShiftsMap(remoteData.shifts);
       const remoteMasters = normalizeMasters(remoteData.masters);
       const remoteSettings = isObject(remoteData.settings) ? remoteData.settings : {};
+      const remoteAuthProfile = normalizeAuthProfileObject(remoteData.authProfile);
       const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : "不明";
 
       if (mode === "overwrite") {
@@ -2662,6 +2738,10 @@
 
       state.sync.lastSyncedAt = new Date().toISOString();
       persistState();
+      if (remoteAuthProfile) {
+        authProfile = remoteAuthProfile;
+        persistAuthProfile(authProfile);
+      }
       selectedShiftId = null;
       selectedMasterId = null;
       selectedPatternId = null;
@@ -2747,12 +2827,13 @@
 
   function buildSyncPayload() {
     return {
-      version: 6,
+      version: 7,
       updatedAt: new Date().toISOString(),
       data: {
         shifts: state.shifts,
         masters: state.masters,
-        settings: state.settings
+        settings: state.settings,
+        authProfile: authProfile || null
       }
     };
   }
