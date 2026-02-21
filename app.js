@@ -167,10 +167,10 @@
   });
 
   async function init() {
-    bindEvents();
     bindAuthEvents();
-    registerServiceWorker();
     renderAuthView();
+    bindEvents();
+    registerServiceWorker();
   }
 
   function bindAuthEvents() {
