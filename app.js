@@ -22,6 +22,7 @@
       gistId: "",
       gistFilename: "shifm-data.json",
       autoSync: false,
+      autoPullOnOpen: true,
       lastSyncedAt: ""
     }
   };
@@ -129,6 +130,7 @@
     gistId: document.getElementById("gistId"),
     gistFilename: document.getElementById("gistFilename"),
     autoSync: document.getElementById("autoSync"),
+    autoPullOnOpen: document.getElementById("autoPullOnOpen"),
     exportBackup: document.getElementById("exportBackup"),
     importBackup: document.getElementById("importBackup"),
     backupFileInput: document.getElementById("backupFileInput"),
@@ -144,6 +146,7 @@
     bindEvents();
     registerServiceWorker();
     renderAll();
+    queueAutoPullOnOpen();
   }
 
   function bindEvents() {
@@ -439,6 +442,7 @@
       state.sync.gistId = refs.gistId.value.trim();
       state.sync.gistFilename = refs.gistFilename.value.trim() || "shifm-data.json";
       state.sync.autoSync = refs.autoSync.checked;
+      state.sync.autoPullOnOpen = refs.autoPullOnOpen.checked;
       persistState();
       setSyncStatus("同期設定を保存しました。");
     });
@@ -1120,6 +1124,7 @@
     refs.gistId.value = state.sync.gistId;
     refs.gistFilename.value = state.sync.gistFilename || "shifm-data.json";
     refs.autoSync.checked = Boolean(state.sync.autoSync);
+    refs.autoPullOnOpen.checked = state.sync.autoPullOnOpen !== false;
 
     if (state.sync.lastSyncedAt) {
       setSyncStatus(`最終同期: ${formatDateTime(state.sync.lastSyncedAt)}`);
@@ -1909,7 +1914,9 @@
     }
   }
 
-  async function pullFromCloud(mode) {
+  async function pullFromCloud(mode, options) {
+    const silent = options && options.silent;
+    const skipConfirm = options && options.skipConfirm;
     try {
       const config = requireSyncConfig();
       setSyncStatus("クラウドから取得中...");
@@ -1939,7 +1946,7 @@
       const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : "不明";
 
       if (mode === "overwrite") {
-        const ok = window.confirm(`クラウドのデータ (${remoteUpdatedAt}) で上書きしますか？`);
+        const ok = skipConfirm ? true : window.confirm(`クラウドのデータ (${remoteUpdatedAt}) で上書きしますか？`);
         if (!ok) {
           setSyncStatus("取得をキャンセルしました。");
           return;
@@ -1961,13 +1968,30 @@
       persistState();
       selectedShiftId = null;
       selectedMasterId = null;
+      selectedPatternId = null;
       renderAll();
       setSyncStatus(`クラウドから取得しました (${formatDateTime(state.sync.lastSyncedAt)})`);
-      alert(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。");
+      if (!silent) {
+        alert(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。");
+      }
     } catch (error) {
       setSyncStatus(error.message);
-      alert(error.message);
+      if (!silent) {
+        alert(error.message);
+      }
     }
+  }
+
+  function queueAutoPullOnOpen() {
+    if (state.sync.autoPullOnOpen === false) {
+      return;
+    }
+    if (!hasSyncConfig()) {
+      return;
+    }
+    setTimeout(() => {
+      pullFromCloud("merge", { silent: true }).catch(() => {});
+    }, 600);
   }
 
   function mergeShiftMaps(localMap, remoteMap) {
@@ -2120,6 +2144,12 @@
     }
 
     return { githubToken, gistId, gistFilename };
+  }
+
+  function hasSyncConfig() {
+    const githubToken = state.sync.githubToken && state.sync.githubToken.trim();
+    const gistId = state.sync.gistId && state.sync.gistId.trim();
+    return Boolean(githubToken && gistId);
   }
 
   function setSyncStatus(text) {
