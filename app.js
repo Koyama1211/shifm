@@ -163,7 +163,6 @@
     exportBackup: document.getElementById("exportBackup"),
     importBackup: document.getElementById("importBackup"),
     backupFileInput: document.getElementById("backupFileInput"),
-    migrateLocalToCloud: document.getElementById("migrateLocalToCloud"),
     pullCloudMerge: document.getElementById("pullCloudMerge"),
     syncStatus: document.getElementById("syncStatus")
   };
@@ -718,10 +717,6 @@
 
     refs.backupFileInput.addEventListener("change", async () => {
       await importBackupFromFile();
-    });
-
-    refs.migrateLocalToCloud.addEventListener("click", async () => {
-      await migrateLocalDataToCloud();
     });
 
     refs.pullCloudMerge.addEventListener("click", async () => {
@@ -2492,29 +2487,6 @@
       return win;
     }
     return null;
-  }
-
-  async function migrateLocalDataToCloud() {
-    if (!hasAnyLocalUserData()) {
-      alert("移行対象のデータが見つかりません。");
-      return;
-    }
-
-    const ok = window.confirm(
-      "この端末の現在データをクラウドに移行します。クラウド側の同一アカウントデータは上書きされます。続行しますか？"
-    );
-    if (!ok) {
-      setSyncStatus("移行をキャンセルしました。");
-      return;
-    }
-
-    await pushToCloud({ silent: false });
-  }
-
-  function hasAnyLocalUserData() {
-    const hasShifts = Object.keys(normalizeShiftsMap(state.shifts)).length > 0;
-    const hasMasters = normalizeMasters(state.masters).length > 0;
-    return hasShifts || hasMasters;
   }
 
   async function pushToCloud(options) {
