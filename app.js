@@ -39,6 +39,7 @@
   let preferredWorkplaceMasterId = uiState.preferredWorkplaceMasterId || "";
   let summaryMasterFilter = normalizeSummaryMasterFilter(uiState.summaryMasterFilter);
   let bulkConfigState = normalizeBulkConfig(uiState.bulkConfig);
+  let mobileShiftPane = normalizeMobileShiftPane(uiState.mobileShiftPane);
   let activeView = loadActiveView();
   let autoSyncTimer = null;
   let authMode = "login";
@@ -62,6 +63,9 @@
     logoutButton: document.getElementById("logoutButton"),
     viewTabs: Array.from(document.querySelectorAll(".view-tab")),
     viewSections: Array.from(document.querySelectorAll(".view-section")),
+    shiftLayout: document.getElementById("shiftLayout"),
+    showShiftListPane: document.getElementById("showShiftListPane"),
+    showShiftFormPane: document.getElementById("showShiftFormPane"),
     monthLabel: document.getElementById("monthLabel"),
     calendarGrid: document.getElementById("calendarGrid"),
     prevMonth: document.getElementById("prevMonth"),
@@ -80,7 +84,6 @@
     shiftForm: document.getElementById("shiftForm"),
     editingShiftId: document.getElementById("editingShiftId"),
     workplaceMaster: document.getElementById("workplaceMaster"),
-    applyMasterToForm: document.getElementById("applyMasterToForm"),
     workplace: document.getElementById("workplace"),
     shiftLine: document.getElementById("shiftLine"),
     shiftPattern: document.getElementById("shiftPattern"),
@@ -398,6 +401,16 @@
         alert("先に日付を選択してください。");
         return;
       }
+      setMobileShiftPane("form");
+      scrollToShiftForm();
+    });
+
+    refs.showShiftListPane.addEventListener("click", () => {
+      setMobileShiftPane("list");
+    });
+
+    refs.showShiftFormPane.addEventListener("click", () => {
+      setMobileShiftPane("form");
       scrollToShiftForm();
     });
 
@@ -486,16 +499,6 @@
       });
     }
 
-    refs.applyMasterToForm.addEventListener("click", () => {
-      const masterId = refs.workplaceMaster.value;
-      if (!masterId) {
-        alert("先に勤務先マスタを選択してください。");
-        return;
-      }
-      applyMasterToShiftForm(masterId, { override: true, remember: true });
-      renderShiftPreview();
-    });
-
     const shiftPreviewFields = [
       refs.startTime,
       refs.endTime,
@@ -558,6 +561,9 @@
     refs.newShift.addEventListener("click", () => {
       selectedShiftId = null;
       renderShiftForm();
+      if (isCompactViewport()) {
+        setMobileShiftPane("form");
+      }
     });
 
     refs.saveAsMaster.addEventListener("click", () => {
@@ -778,6 +784,29 @@
       section.classList.toggle("is-active", isActive);
       section.setAttribute("aria-hidden", isActive ? "false" : "true");
     }
+
+    renderShiftPaneState();
+  }
+
+  function renderShiftPaneState() {
+    if (!refs.shiftLayout) {
+      return;
+    }
+    const pane = normalizeMobileShiftPane(mobileShiftPane);
+    refs.shiftLayout.classList.toggle("mobile-pane-list", pane === "list");
+    refs.shiftLayout.classList.toggle("mobile-pane-form", pane === "form");
+
+    refs.showShiftListPane.classList.toggle("is-active", pane === "list");
+    refs.showShiftFormPane.classList.toggle("is-active", pane === "form");
+
+    refs.showShiftListPane.setAttribute("aria-pressed", pane === "list" ? "true" : "false");
+    refs.showShiftFormPane.setAttribute("aria-pressed", pane === "form" ? "true" : "false");
+  }
+
+  function setMobileShiftPane(nextPane) {
+    mobileShiftPane = normalizeMobileShiftPane(nextPane);
+    persistUiState();
+    renderShiftPaneState();
   }
 
   function setActiveView(viewName) {
@@ -824,9 +853,15 @@
     refs.monthLabel.textContent = `${currentMonth.getFullYear()}年 ${currentMonth.getMonth() + 1}月`;
     refs.calendarGrid.innerHTML = "";
 
-    for (const day of WEEKDAYS) {
+    for (let i = 0; i < WEEKDAYS.length; i += 1) {
+      const day = WEEKDAYS[i];
       const dayCell = document.createElement("div");
       dayCell.className = "calendar-weekday";
+      if (i === 0) {
+        dayCell.classList.add("sun");
+      } else if (i === 6) {
+        dayCell.classList.add("sat");
+      }
       dayCell.textContent = day;
       refs.calendarGrid.appendChild(dayCell);
     }
@@ -848,6 +883,12 @@
 
       const cell = document.createElement("div");
       cell.className = "calendar-day";
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek === 0) {
+        cell.classList.add("sun");
+      } else if (dayOfWeek === 6) {
+        cell.classList.add("sat");
+      }
       if (date.getMonth() !== currentMonth.getMonth()) {
         cell.classList.add("outside");
       }
@@ -864,13 +905,14 @@
       if (dayShifts.length > 0) {
         const count = document.createElement("div");
         count.className = "day-count";
-        count.textContent = `${dayShifts.length}件`;
+        count.textContent = `${dayShifts.length}`;
         cell.appendChild(count);
 
         const summary = summarizeDayStatus(dayKey, dayShifts);
         const status = document.createElement("div");
-        status.className = `day-status ${summary.className}`;
-        status.textContent = summary.label;
+        status.className = `day-status day-status-dot ${summary.className}`;
+        status.title = summary.label;
+        status.setAttribute("aria-label", summary.label);
         cell.appendChild(status);
 
         const pay = document.createElement("div");
@@ -887,7 +929,7 @@
         renderShiftForm();
         renderDayShiftList();
         if (isCompactViewport()) {
-          scrollToShiftForm();
+          setMobileShiftPane("list");
         }
       });
 
@@ -908,7 +950,7 @@
     const editing = dayShifts.find((item) => item.id === selectedShiftId);
     if (!editing) {
       clearShiftForm(false);
-      refs.editingStatus.textContent = "新規シフトを入力中";
+      refs.editingStatus.textContent = "新規追加モード（一覧を選ぶと編集モードになります）";
       return;
     }
 
@@ -931,7 +973,7 @@
     renderTimeeInputState();
     renderShiftPreview();
 
-    refs.editingStatus.textContent = "一覧から選択したシフトを編集中";
+    refs.editingStatus.textContent = "編集モード（保存で上書き更新）";
   }
 
   function renderDayShiftList() {
@@ -995,6 +1037,10 @@
         selectedShiftId = shift.id;
         renderShiftForm();
         renderDayShiftList();
+        if (isCompactViewport()) {
+          setMobileShiftPane("form");
+          scrollToShiftForm();
+        }
       });
 
       refs.dayShiftList.appendChild(li);
@@ -1842,7 +1888,7 @@
     renderShiftPreview();
 
     if (resetAll) {
-      refs.editingStatus.textContent = "新規シフトを入力中";
+      refs.editingStatus.textContent = "新規追加モード（一覧を選ぶと編集モードになります）";
     }
   }
 
@@ -3759,7 +3805,8 @@
       selectedDate,
       preferredWorkplaceMasterId,
       summaryMasterFilter,
-      bulkConfig: bulkConfigState
+      bulkConfig: bulkConfigState,
+      mobileShiftPane
     };
     localStorage.setItem(UI_STATE_KEY, JSON.stringify(payload));
   }
@@ -3773,6 +3820,13 @@
       return "all";
     }
     return value;
+  }
+
+  function normalizeMobileShiftPane(value) {
+    if (value === "form" || value === "list") {
+      return value;
+    }
+    return "list";
   }
 
   function parseMonthKey(value) {
