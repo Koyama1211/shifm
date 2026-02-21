@@ -197,11 +197,7 @@
     });
 
     refs.authToggleMode.addEventListener("click", () => {
-      if (authMode === "login") {
-        authMode = "register";
-      } else {
-        authMode = authProfile ? "login" : "register";
-      }
+      authMode = authMode === "login" ? "register" : "login";
       setAuthStatus("");
       renderAuthView();
     });
@@ -249,9 +245,7 @@
     }
 
     if (!authProfile) {
-      authMode = "register";
-      setAuthStatus("登録が必要です。新規登録に切り替えました。");
-      renderAuthView();
+      setAuthStatus("このブラウザには登録情報がありません。新規登録に切り替えるか、登録済みブラウザを使用してください。");
       return;
     }
 
