@@ -7,9 +7,9 @@
 - 月間カレンダー表示
 - カレンダー選択日のシフト一覧をカレンダー直下に表示
 - 起動時ログイン認証 (Supabase: メールアドレス + パスワード)
-- 日別シフト登録 (1日複数件 / 勤務先 / 開始終了 / 休憩 / ステータス / メモ)
+- 日別シフト登録 (1日複数件 / 勤務先 / 開始終了 / 休憩 / メモ)
 - 保存前の総支給見込みプレビュー（労働時間/支給見込み）
-- 勤務ステータス管理 (予定 / 勤務済み / 支払済み)
+- 勤務ステータス自動判定 (日付経過で勤務済み / 給与実績入力で支払済み)
 - タイミー勤務先マスタ選択時のみ、案件先勤務先名と時給/交通費の入力欄を表示
 - 勤務先マスタ保存 (勤務先名 + 給与ルール + ライン/パターン)
 - 勤務先ごとの時給・交通費の期間履歴管理 (適用開始日ベース)
@@ -21,8 +21,7 @@
 - 勤務先フィルタ付き月次サマリー + 勤務先別内訳
 - 月次CSV出力
 - Google Calendar 登録 (選択シフト or 当日分を登録画面に自動入力)
-- PC/スマホ同期 (Supabaseユーザーごと / 上書き取得・差分マージ取得)
-- 自動同期オプション (保存時自動同期 / 起動時差分マージ取得)
+- PC/スマホ同期 (Supabaseユーザーごと / 自動同期)
 - バックアップ書き出し/読み込み
 - PWA対応 (ホーム画面追加・オフライン時の基本表示)
 - タブ型UIで機能分離 (`シフト` / `月次サマリー` / `設定` / `同期`)
@@ -47,8 +46,9 @@
 10. `設定` タブの `勤務先マスタ管理（低頻度）` で、勤務先ごとの `時給・交通費の期間履歴` を登録する。
 11. 勤務先ごとのルールが必要な場合は同画面で勤務先別の残業/控除ルールを設定する。
 12. `月次サマリー` タブで勤務先フィルタを使って月次集計を確認し、勤務先別内訳も確認する。必要ならCSV出力する。
-13. Googleカレンダー登録やマスタ保存など低頻度操作は、`シフト` タブの `補助機能（低頻度）` から実行する。
-14. 毎週同じ勤務が多い場合は、`シフト` タブの `定型シフト一括登録（週次）` で曜日・期間を指定して一括作成する。
+13. `月次サマリー` タブの `給与実績入力` に対象月・勤務先・支払実績を入れると、その勤務先の当月シフトは自動で `支払済み` になる。
+14. Googleカレンダー登録やマスタ保存など低頻度操作は、`シフト` タブの `補助機能（低頻度）` から実行する。
+15. 毎週同じ勤務が多い場合は、`シフト` タブの `定型シフト一括登録（週次）` で曜日・期間を指定して一括作成する。
 
 ## PC/スマホ同期の設定（Supabase）
 
@@ -66,17 +66,23 @@ create table if not exists public.shifm_sync (
 
 alter table public.shifm_sync enable row level security;
 
-create policy if not exists "select own sync"
+grant select, insert, update on public.shifm_sync to authenticated;
+
+drop policy if exists "select own sync" on public.shifm_sync;
+drop policy if exists "insert own sync" on public.shifm_sync;
+drop policy if exists "update own sync" on public.shifm_sync;
+
+create policy "select own sync"
 on public.shifm_sync
 for select
 using (auth.uid() = user_id);
 
-create policy if not exists "insert own sync"
+create policy "insert own sync"
 on public.shifm_sync
 for insert
 with check (auth.uid() = user_id);
 
-create policy if not exists "update own sync"
+create policy "update own sync"
 on public.shifm_sync
 for update
 using (auth.uid() = user_id)

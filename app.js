@@ -15,6 +15,7 @@
   const defaultState = {
     shifts: {},
     masters: [],
+    payrolls: [],
     settings: {
       defaultHourlyRate: 1100,
       overtimeThreshold: 8,
@@ -93,6 +94,7 @@
     transport: document.getElementById("transport"),
     transportGroup: document.getElementById("transportGroup"),
     timeeCompensationFields: document.getElementById("timeeCompensationFields"),
+    shiftStatusAutoLabel: document.getElementById("shiftStatusAutoLabel"),
     shiftStatus: document.getElementById("shiftStatus"),
     memo: document.getElementById("memo"),
     previewWorkedHours: document.getElementById("previewWorkedHours"),
@@ -156,6 +158,12 @@
     totalHours: document.getElementById("totalHours"),
     grossPay: document.getElementById("grossPay"),
     netPay: document.getElementById("netPay"),
+    payrollForm: document.getElementById("payrollForm"),
+    payrollMonth: document.getElementById("payrollMonth"),
+    payrollWorkplaceMaster: document.getElementById("payrollWorkplaceMaster"),
+    payrollAmount: document.getElementById("payrollAmount"),
+    payrollPaidAt: document.getElementById("payrollPaidAt"),
+    payrollList: document.getElementById("payrollList"),
     monthlyRows: document.getElementById("monthlyRows"),
     workplaceSummaryRows: document.getElementById("workplaceSummaryRows"),
     exportCsv: document.getElementById("exportCsv"),
@@ -405,6 +413,11 @@
       summaryMasterFilter = normalizeSummaryMasterFilter(refs.summaryMasterFilter.value);
       persistUiState();
       renderSummary();
+    });
+
+    refs.payrollForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      savePayrollFromForm();
     });
 
     refs.workplaceMaster.addEventListener("change", () => {
@@ -854,7 +867,7 @@
         count.textContent = `${dayShifts.length}件`;
         cell.appendChild(count);
 
-        const summary = summarizeDayStatus(dayShifts);
+        const summary = summarizeDayStatus(dayKey, dayShifts);
         const status = document.createElement("div");
         status.className = `day-status ${summary.className}`;
         status.textContent = summary.label;
@@ -904,7 +917,7 @@
     refs.startTime.value = editing.startTime;
     refs.endTime.value = editing.endTime;
     refs.breakMinutes.value = editing.breakMinutes;
-    refs.shiftStatus.value = normalizeShiftStatus(editing.shiftStatus);
+    syncShiftStatusAutoLabel(selectedDate, editing);
     refs.memo.value = editing.memo || "";
     refs.timeeEnabled.checked = Boolean(editing.timeeEnabled);
 
@@ -961,7 +974,7 @@
       const sub = document.createElement("div");
       sub.className = "day-shift-sub day-shift-meta";
       const status = document.createElement("span");
-      const normalizedStatus = normalizeShiftStatus(shift.shiftStatus);
+      const normalizedStatus = resolveAutoShiftStatus(selectedDate, shift);
       status.className = `shift-status-badge ${getShiftStatusClass(normalizedStatus)}`;
       status.textContent = getShiftStatusLabel(normalizedStatus);
       sub.appendChild(status);
@@ -1419,11 +1432,15 @@
   function renderWorkplaceMasterOptions() {
     renderMasterSelectOptions(refs.workplaceMaster);
     renderMasterSelectOptions(refs.bulkWorkplaceMaster);
+    renderMasterSelectOptions(refs.payrollWorkplaceMaster, "勤務先を選択");
   }
 
-  function renderMasterSelectOptions(selectElement) {
+  function renderMasterSelectOptions(selectElement, emptyLabel) {
+    if (!selectElement) {
+      return;
+    }
     const previousValue = selectElement.value;
-    selectElement.innerHTML = '<option value="">未選択</option>';
+    selectElement.innerHTML = `<option value="">${escapeHtml(emptyLabel || "未選択")}</option>`;
 
     const masters = sortMasters(state.masters);
     for (const master of masters) {
@@ -1459,6 +1476,126 @@
 
     refs.summaryMasterFilter.value = "all";
     summaryMasterFilter = "all";
+  }
+
+  function renderPayrollForm() {
+    const defaultMonth = toMonthKey(currentMonth);
+    const monthValue = normalizeMonthKeyInput(refs.payrollMonth.value) || defaultMonth;
+    refs.payrollMonth.value = monthValue;
+    if (!isValidDateKey(refs.payrollPaidAt.value)) {
+      refs.payrollPaidAt.value = toDateKey(new Date());
+    }
+  }
+
+  function renderPayrollList() {
+    refs.payrollList.innerHTML = "";
+    const targetMonth = toMonthKey(currentMonth);
+    const records = normalizePayrollRecords(state.payrolls).filter((item) => item.monthKey === targetMonth);
+    if (records.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "pattern-item";
+      empty.innerHTML = '<div class="pattern-item-sub">この月の給与実績はまだありません。</div>';
+      refs.payrollList.appendChild(empty);
+      return;
+    }
+
+    for (const record of records) {
+      const master = getMasterById(record.workplaceMasterId);
+      const label = master ? master.name : "削除済み勤務先";
+      const li = document.createElement("li");
+      li.className = "pattern-item";
+      li.innerHTML =
+        "<div><div>" +
+        escapeHtml(`${label} / ${record.monthKey}`) +
+        '</div><div class="pattern-item-sub">' +
+        escapeHtml(`支払日 ${record.paidAt} / 実績 ${formatCurrency(record.amount)}`) +
+        "</div></div>";
+
+      const actions = document.createElement("div");
+      actions.className = "actions";
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "danger";
+      removeButton.textContent = "削除";
+      removeButton.addEventListener("click", () => {
+        deletePayrollRecord(record.id);
+      });
+      actions.appendChild(removeButton);
+      li.appendChild(actions);
+      refs.payrollList.appendChild(li);
+    }
+  }
+
+  function savePayrollFromForm() {
+    const monthKey = normalizeMonthKeyInput(refs.payrollMonth.value);
+    if (!monthKey) {
+      alert("対象月を入力してください。");
+      return;
+    }
+
+    const workplaceMasterId = refs.payrollWorkplaceMaster.value;
+    if (!workplaceMasterId || !getMasterById(workplaceMasterId)) {
+      alert("勤務先マスタを選択してください。");
+      return;
+    }
+
+    const amount = toNonNegativeNumber(refs.payrollAmount.value, 0);
+    if (amount <= 0) {
+      alert("支払実績額を入力してください。");
+      return;
+    }
+
+    const paidAt = isValidDateKey(refs.payrollPaidAt.value) ? refs.payrollPaidAt.value : toDateKey(new Date());
+    const nextRecord = {
+      id: createShiftId(),
+      monthKey,
+      workplaceMasterId,
+      amount,
+      paidAt
+    };
+
+    const normalizedRecords = normalizePayrollRecords(state.payrolls);
+    const existingIndex = normalizedRecords.findIndex((item) => item.monthKey === monthKey && item.workplaceMasterId === workplaceMasterId);
+    if (existingIndex >= 0) {
+      const existing = normalizedRecords[existingIndex];
+      nextRecord.id = existing.id;
+    }
+
+    state.payrolls = upsertPayrollRecord(normalizedRecords, nextRecord);
+    persistState();
+    renderCalendar();
+    renderShiftForm();
+    renderDayShiftList();
+    renderSummary();
+    queueAutoSync("給与実績保存");
+    alert("給与実績を保存しました。関連シフトを自動で支払済みに反映しました。");
+  }
+
+  function deletePayrollRecord(recordId) {
+    const normalizedRecords = normalizePayrollRecords(state.payrolls);
+    const target = normalizedRecords.find((item) => item.id === recordId);
+    if (!target) {
+      return;
+    }
+    if (!window.confirm("この給与実績を削除しますか？")) {
+      return;
+    }
+    state.payrolls = normalizedRecords.filter((item) => item.id !== recordId);
+    persistState();
+    renderCalendar();
+    renderShiftForm();
+    renderDayShiftList();
+    renderSummary();
+    queueAutoSync("給与実績削除");
+  }
+
+  function upsertPayrollRecord(records, targetRecord) {
+    const normalized = normalizePayrollRecords(records);
+    const next = normalized.filter(
+      (item) => !(item.monthKey === targetRecord.monthKey && item.workplaceMasterId === targetRecord.workplaceMasterId)
+    );
+    next.push(targetRecord);
+    return normalizePayrollRecords(next);
   }
 
   function renderBulkForm() {
@@ -1529,6 +1666,8 @@
 
   function renderSummary() {
     refs.summaryMonthLabel.textContent = `${currentMonth.getFullYear()}年 ${currentMonth.getMonth() + 1}月`;
+    renderPayrollForm();
+    renderPayrollList();
 
     const rows = getCurrentMonthRows();
     const filterMasterId = normalizeSummaryMasterFilter(summaryMasterFilter);
@@ -1553,7 +1692,7 @@
       const workplaceBase = row.shift.workplace || "-";
       const workplaceLabel = row.shift.timeeEnabled ? `タイミー / ${workplaceBase}` : workplaceBase;
       const workplaceText = row.shift.memo ? `${workplaceLabel} (${row.shift.memo})` : workplaceLabel;
-      const normalizedStatus = normalizeShiftStatus(row.shift.shiftStatus);
+      const normalizedStatus = resolveAutoShiftStatus(row.dateKey, row.shift);
       tr.innerHTML =
         "<td>" +
         escapeHtml(row.dateKey) +
@@ -1681,6 +1820,7 @@
     refs.endTime.value = "";
     refs.breakMinutes.value = 0;
     refs.shiftStatus.value = "planned";
+    refs.shiftStatusAutoLabel.value = getShiftStatusLabel("planned");
     refs.memo.value = "";
     refs.timeeEnabled.checked = false;
 
@@ -1710,8 +1850,19 @@
     if (!selectedDate) {
       refs.previewWorkedHours.textContent = "-";
       refs.previewGrossPay.textContent = "-";
+      refs.shiftStatus.value = "planned";
+      refs.shiftStatusAutoLabel.value = getShiftStatusLabel("planned");
       return;
     }
+
+    const selectedMaster = getMasterById(refs.workplaceMaster.value);
+    const timeeEnabled = Boolean(refs.timeeEnabled.checked);
+    const draftShiftForStatus = {
+      workplace: refs.workplace.value.trim(),
+      workplaceMasterId: selectedMaster ? selectedMaster.id : "",
+      timeeEnabled
+    };
+    syncShiftStatusAutoLabel(selectedDate, draftShiftForStatus);
 
     const startTime = refs.startTime.value.trim();
     const endTime = refs.endTime.value.trim();
@@ -1721,8 +1872,6 @@
       return;
     }
 
-    const selectedMaster = getMasterById(refs.workplaceMaster.value);
-    const timeeEnabled = Boolean(refs.timeeEnabled.checked);
     const compensation = resolveCompensationForShift(
       selectedDate,
       {
@@ -1752,12 +1901,14 @@
       breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
       hourlyRate: compensation.hourlyRate,
       transport: compensation.transport,
-      shiftStatus: normalizeShiftStatus(refs.shiftStatus.value),
+      shiftStatus: "planned",
       memo: refs.memo.value.trim(),
       timeeEnabled,
       timeeJobId: "",
       timeeFixedPay: 0
     };
+    syncShiftStatusAutoLabel(selectedDate, shift);
+    shift.shiftStatus = refs.shiftStatus.value;
     const result = calcShiftPay(selectedDate, shift);
     refs.previewWorkedHours.textContent = `${(result.workedMinutes / 60).toFixed(2)} 時間`;
     refs.previewGrossPay.textContent = formatCurrency(result.gross);
@@ -1791,7 +1942,7 @@
       breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
       hourlyRate: timeeEnabled ? hourlyRateInput : paySnapshot.hourlyRate,
       transport: timeeEnabled ? transportInput : paySnapshot.transport,
-      shiftStatus: normalizeShiftStatus(refs.shiftStatus.value),
+      shiftStatus: "planned",
       memo: refs.memo.value.trim(),
       timeeEnabled,
       timeeJobId: "",
@@ -1824,6 +1975,8 @@
     if (shift.timeeEnabled && shift.hourlyRate <= 0) {
       throw new Error("タイミー案件では時給を入力してください。");
     }
+
+    shift.shiftStatus = resolveAutoShiftStatus(selectedDate || toDateKey(new Date()), shift);
 
     return shift;
   }
@@ -2352,6 +2505,7 @@
     }
 
     state.masters = state.masters.filter((item) => item.id !== masterId);
+    state.payrolls = normalizePayrollRecords(state.payrolls).filter((item) => item.workplaceMasterId !== masterId);
     clearMasterReference(masterId);
 
     if (refs.workplaceMaster.value === masterId) {
@@ -2474,7 +2628,7 @@
     url.searchParams.set(
       "details",
       `勤務: ${shift.startTime}-${shift.endTime}\n状態: ${getShiftStatusLabel(
-        normalizeShiftStatus(shift.shiftStatus)
+        resolveAutoShiftStatus(dateKey, shift)
       )}\n休憩: ${shift.breakMinutes}分\n時給: ${result.hourlyRate}円\n交通費: ${result.transport}円${
         shift.memo ? `\nメモ: ${shift.memo}` : ""
       }`
@@ -2554,6 +2708,7 @@
       const remoteData = parsed && parsed.data ? parsed.data : {};
       const remoteShifts = normalizeShiftsMap(remoteData.shifts);
       const remoteMasters = normalizeMasters(remoteData.masters);
+      const remotePayrolls = normalizePayrollRecords(remoteData.payrolls);
       const remoteSettings = isObject(remoteData.settings) ? remoteData.settings : {};
       const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : data.updated_at || "不明";
 
@@ -2566,6 +2721,7 @@
 
         state.shifts = remoteShifts;
         state.masters = remoteMasters;
+        state.payrolls = remotePayrolls;
         state.settings = {
           ...defaultState.settings,
           ...state.settings,
@@ -2574,6 +2730,7 @@
       } else {
         state.shifts = mergeShiftMaps(state.shifts, remoteShifts);
         state.masters = mergeMasters(state.masters, remoteMasters);
+        state.payrolls = mergePayrollRecords(state.payrolls, remotePayrolls);
       }
 
       state.sync.lastSyncedAt = new Date().toISOString();
@@ -2662,13 +2819,25 @@
     return sortMasters(Array.from(byName.values()));
   }
 
+  function mergePayrollRecords(localRecords, remoteRecords) {
+    const merged = new Map();
+    for (const item of normalizePayrollRecords(localRecords)) {
+      merged.set(`${item.monthKey}::${item.workplaceMasterId}`, item);
+    }
+    for (const item of normalizePayrollRecords(remoteRecords)) {
+      merged.set(`${item.monthKey}::${item.workplaceMasterId}`, item);
+    }
+    return normalizePayrollRecords(Array.from(merged.values()));
+  }
+
   function buildSyncPayload() {
     return {
-      version: 8,
+      version: 9,
       updatedAt: new Date().toISOString(),
       data: {
         shifts: state.shifts,
         masters: state.masters,
+        payrolls: state.payrolls,
         settings: state.settings
       }
     };
@@ -2707,6 +2876,7 @@
       const rawData = isObject(parsed) && isObject(parsed.data) ? parsed.data : parsed;
       const incomingShifts = normalizeShiftsMap(rawData.shifts);
       const incomingMasters = normalizeMasters(rawData.masters);
+      const incomingPayrolls = normalizePayrollRecords(rawData.payrolls);
       const incomingSettings = isObject(rawData.settings) ? rawData.settings : {};
 
       if (!window.confirm("現在データをバックアップ内容で上書きしますか？")) {
@@ -2716,6 +2886,7 @@
 
       state.shifts = incomingShifts;
       state.masters = incomingMasters;
+      state.payrolls = incomingPayrolls;
       state.settings = {
         ...defaultState.settings,
         ...state.settings,
@@ -2811,7 +2982,7 @@
         row.result.hourlyRate,
         row.result.transport,
         row.shift.timeeEnabled ? "はい" : "いいえ",
-        getShiftStatusLabel(normalizeShiftStatus(row.shift.shiftStatus)),
+        getShiftStatusLabel(resolveAutoShiftStatus(row.dateKey, row.shift)),
         row.shift.memo || "",
         (row.result.workedMinutes / 60).toFixed(2),
         row.result.gross,
@@ -2856,6 +3027,7 @@
       const loaded = {
         shifts: normalizeShiftsMap(parsed.shifts),
         masters: normalizeMasters(parsed.masters),
+        payrolls: normalizePayrollRecords(parsed.payrolls),
         settings: {
           ...defaultState.settings,
           ...(isObject(parsed.settings) ? parsed.settings : {})
@@ -2977,6 +3149,49 @@
     }
 
     return sortMasters(Array.from(byName.values()));
+  }
+
+  function normalizePayrollRecords(rawRecords) {
+    const list = [];
+    let candidates = [];
+    if (Array.isArray(rawRecords)) {
+      candidates = rawRecords;
+    } else if (isObject(rawRecords)) {
+      candidates = Object.values(rawRecords);
+    }
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const raw = candidates[i];
+      if (!isObject(raw)) {
+        continue;
+      }
+      const monthKey = normalizeMonthKeyInput(raw.monthKey);
+      const workplaceMasterId = typeof raw.workplaceMasterId === "string" ? raw.workplaceMasterId.trim() : "";
+      if (!monthKey || !workplaceMasterId) {
+        continue;
+      }
+      list.push({
+        id: typeof raw.id === "string" && raw.id.trim() ? raw.id : createShiftId(),
+        monthKey,
+        workplaceMasterId,
+        amount: toNonNegativeNumber(raw.amount, 0),
+        paidAt: isValidDateKey(raw.paidAt) ? raw.paidAt : toDateKey(new Date())
+      });
+    }
+
+    list.sort((a, b) => {
+      const monthDiff = b.monthKey.localeCompare(a.monthKey);
+      if (monthDiff !== 0) {
+        return monthDiff;
+      }
+      const paidAtDiff = b.paidAt.localeCompare(a.paidAt);
+      if (paidAtDiff !== 0) {
+        return paidAtDiff;
+      }
+      return a.workplaceMasterId.localeCompare(b.workplaceMasterId);
+    });
+
+    return list;
   }
 
   function normalizeMaster(raw, index) {
@@ -3366,6 +3581,44 @@
     return "planned";
   }
 
+  function resolveAutoShiftStatus(dateKey, shift) {
+    if (!isValidDateKey(dateKey) || !shift) {
+      return "planned";
+    }
+    if (hasPayrollRecordForShift(dateKey, shift)) {
+      return "paid";
+    }
+    const todayKey = toDateKey(new Date());
+    if (dateKey < todayKey) {
+      return "worked";
+    }
+    return "planned";
+  }
+
+  function hasPayrollRecordForShift(dateKey, shift) {
+    const monthKey = dateKey.slice(0, 7);
+    const masterId = resolveMasterIdForShift(shift);
+    if (!masterId) {
+      return false;
+    }
+    const record = normalizePayrollRecords(state.payrolls).find(
+      (item) => item.monthKey === monthKey && item.workplaceMasterId === masterId
+    );
+    if (!record) {
+      return false;
+    }
+    if (!isValidDateKey(record.paidAt)) {
+      return true;
+    }
+    return dateKey <= record.paidAt;
+  }
+
+  function syncShiftStatusAutoLabel(dateKey, shift) {
+    const status = resolveAutoShiftStatus(dateKey, shift);
+    refs.shiftStatus.value = status;
+    refs.shiftStatusAutoLabel.value = getShiftStatusLabel(status);
+  }
+
   function getShiftStatusLabel(status) {
     const normalized = normalizeShiftStatus(status);
     if (normalized === "worked") {
@@ -3382,7 +3635,7 @@
     return `status-${normalized}`;
   }
 
-  function summarizeDayStatus(dayShifts) {
+  function summarizeDayStatus(dateKey, dayShifts) {
     if (!Array.isArray(dayShifts) || dayShifts.length === 0) {
       return {
         label: "予定",
@@ -3394,7 +3647,7 @@
     let worked = 0;
     let paid = 0;
     for (const shift of dayShifts) {
-      const status = normalizeShiftStatus(shift.shiftStatus);
+      const status = resolveAutoShiftStatus(dateKey, shift);
       if (status === "paid") {
         paid += 1;
       } else if (status === "worked") {
@@ -3540,6 +3793,22 @@
 
   function toMonthKey(date) {
     return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+  }
+
+  function normalizeMonthKeyInput(value) {
+    if (typeof value !== "string") {
+      return "";
+    }
+    const matched = /^(\d{4})-(\d{2})$/.exec(value.trim());
+    if (!matched) {
+      return "";
+    }
+    const year = Number(matched[1]);
+    const month = Number(matched[2]);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+      return "";
+    }
+    return `${matched[1]}-${matched[2]}`;
   }
 
   function isValidDateKey(value) {

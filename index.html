@@ -154,12 +154,9 @@
                   <input id="breakMinutes" name="breakMinutes" type="number" min="0" step="1" value="0" />
                 </div>
                 <div>
-                  <label for="shiftStatus">勤務ステータス</label>
-                  <select id="shiftStatus" name="shiftStatus">
-                    <option value="planned">予定</option>
-                    <option value="worked">勤務済み</option>
-                    <option value="paid">支払済み</option>
-                  </select>
+                  <label for="shiftStatusAutoLabel">勤務ステータス（自動）</label>
+                  <input id="shiftStatusAutoLabel" name="shiftStatusAutoLabel" type="text" value="予定" readonly />
+                  <input id="shiftStatus" name="shiftStatus" type="hidden" value="planned" />
                 </div>
               </div>
               <div id="timeeCompensationFields" class="field-row split" hidden>
@@ -299,6 +296,37 @@
               <option value="all">全勤務先</option>
             </select>
           </div>
+          <details class="advanced-block">
+            <summary>給与実績入力（入力した勤務先は自動で支払済みに反映）</summary>
+            <form id="payrollForm">
+              <div class="field-row split">
+                <div>
+                  <label for="payrollMonth">対象月</label>
+                  <input id="payrollMonth" name="payrollMonth" type="month" required />
+                </div>
+                <div>
+                  <label for="payrollWorkplaceMaster">勤務先マスタ</label>
+                  <select id="payrollWorkplaceMaster" name="payrollWorkplaceMaster" required>
+                    <option value="">勤務先を選択</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row split">
+                <div>
+                  <label for="payrollAmount">支払実績額(円)</label>
+                  <input id="payrollAmount" name="payrollAmount" type="number" min="0" step="1" required />
+                </div>
+                <div>
+                  <label for="payrollPaidAt">支払日</label>
+                  <input id="payrollPaidAt" name="payrollPaidAt" type="date" />
+                </div>
+              </div>
+              <div class="actions">
+                <button type="submit" class="primary">給与実績を保存</button>
+              </div>
+            </form>
+            <ul id="payrollList" class="pattern-list"></ul>
+          </details>
           <div class="cards">
             <article class="card">
               <p>勤務日数</p>
