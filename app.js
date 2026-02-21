@@ -4,6 +4,7 @@
   const STORAGE_KEY = "shifm_store_v3";
   const UI_VIEW_KEY = "shifm_ui_view_v1";
   const UI_STATE_KEY = "shifm_ui_state_v1";
+  const AUTH_PROFILE_KEY = "shifm_auth_profile_v1";
   const LEGACY_STORAGE_KEYS = ["shifm_store_v2", "shifm_store_v1"];
   const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
   const VIEW_NAMES = ["shift", "summary", "settings", "sync"];
@@ -40,8 +41,24 @@
   let bulkConfigState = normalizeBulkConfig(uiState.bulkConfig);
   let activeView = loadActiveView();
   let autoSyncTimer = null;
+  let authProfile = loadAuthProfile();
+  let authMode = authProfile ? "login" : "register";
+  let authenticatedUserId = "";
 
   const refs = {
+    appMain: document.getElementById("appMain"),
+    authScreen: document.getElementById("authScreen"),
+    authForm: document.getElementById("authForm"),
+    authTitle: document.getElementById("authTitle"),
+    authDescription: document.getElementById("authDescription"),
+    authUserId: document.getElementById("authUserId"),
+    authPassword: document.getElementById("authPassword"),
+    authPasswordConfirm: document.getElementById("authPasswordConfirm"),
+    authConfirmRow: document.getElementById("authConfirmRow"),
+    authStatus: document.getElementById("authStatus"),
+    authSubmit: document.getElementById("authSubmit"),
+    authToggleMode: document.getElementById("authToggleMode"),
+    logoutButton: document.getElementById("logoutButton"),
     viewTabs: Array.from(document.querySelectorAll(".view-tab")),
     viewSections: Array.from(document.querySelectorAll(".view-section")),
     monthLabel: document.getElementById("monthLabel"),
@@ -145,16 +162,151 @@
     syncStatus: document.getElementById("syncStatus")
   };
 
-  init();
+  init().catch((error) => {
+    console.error(error);
+  });
 
-  function init() {
+  async function init() {
     bindEvents();
+    bindAuthEvents();
     registerServiceWorker();
+    renderAuthView();
+  }
+
+  function bindAuthEvents() {
+    refs.authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await submitAuth();
+    });
+
+    refs.authToggleMode.addEventListener("click", () => {
+      if (authMode === "login") {
+        authMode = "register";
+      } else {
+        authMode = authProfile ? "login" : "register";
+      }
+      setAuthStatus("");
+      renderAuthView();
+    });
+  }
+
+  async function submitAuth() {
+    const userId = refs.authUserId.value.trim();
+    const password = refs.authPassword.value;
+    const passwordConfirm = refs.authPasswordConfirm.value;
+
+    if (!userId) {
+      setAuthStatus("ユーザーIDを入力してください。");
+      return;
+    }
+    if (!password || password.length < 6) {
+      setAuthStatus("パスワードは6文字以上で入力してください。");
+      return;
+    }
+
+    if (authMode === "register") {
+      if (password !== passwordConfirm) {
+        setAuthStatus("パスワード確認が一致しません。");
+        return;
+      }
+      if (authProfile && !window.confirm("既存ログイン情報を上書きしますか？")) {
+        return;
+      }
+
+      const salt = createSalt();
+      const passwordHash = await hashPassword(userId, password, salt);
+      authProfile = {
+        version: 1,
+        userId,
+        salt,
+        passwordHash,
+        updatedAt: new Date().toISOString()
+      };
+      persistAuthProfile(authProfile);
+      authMode = "login";
+      setAuthStatus("登録しました。続けてログインしてください。");
+      refs.authPassword.value = "";
+      refs.authPasswordConfirm.value = "";
+      renderAuthView();
+      return;
+    }
+
+    if (!authProfile) {
+      authMode = "register";
+      setAuthStatus("登録が必要です。新規登録に切り替えました。");
+      renderAuthView();
+      return;
+    }
+
+    if (userId !== authProfile.userId) {
+      setAuthStatus("ユーザーIDが一致しません。");
+      return;
+    }
+
+    const attemptedHash = await hashPassword(userId, password, authProfile.salt);
+    if (attemptedHash !== authProfile.passwordHash) {
+      setAuthStatus("パスワードが違います。");
+      return;
+    }
+
+    authenticatedUserId = userId;
+    refs.authPassword.value = "";
+    refs.authPasswordConfirm.value = "";
+    setAuthStatus("");
+    unlockApp();
+  }
+
+  function renderAuthView() {
+    const isLogin = authMode === "login";
+    refs.authTitle.textContent = isLogin ? "ログイン" : "新規登録";
+    refs.authDescription.textContent = isLogin
+      ? "登録済みユーザーで認証してください。"
+      : "最初にユーザーIDとパスワードを登録します。";
+    refs.authSubmit.textContent = isLogin ? "ログイン" : "登録";
+    refs.authToggleMode.textContent = isLogin ? "新規登録に切替" : "ログインに切替";
+    refs.authConfirmRow.hidden = isLogin;
+    refs.authPasswordConfirm.required = !isLogin;
+
+    if (authProfile && authProfile.userId && isLogin) {
+      refs.authUserId.value = authProfile.userId;
+    }
+  }
+
+  function unlockApp() {
+    refs.authScreen.hidden = true;
+    refs.appMain.hidden = false;
+    refs.logoutButton.hidden = false;
+
+    if (authenticatedUserId) {
+      state.sync.userId = authenticatedUserId;
+      persistState();
+    }
+
     renderAll();
     queueAutoPullOnOpen();
   }
 
+  function lockApp() {
+    refs.appMain.hidden = true;
+    refs.authScreen.hidden = false;
+    refs.logoutButton.hidden = true;
+    refs.authPassword.value = "";
+    refs.authPasswordConfirm.value = "";
+    authenticatedUserId = "";
+    authMode = authProfile ? "login" : "register";
+    setAuthStatus("");
+    renderAuthView();
+  }
+
+  function setAuthStatus(text) {
+    refs.authStatus.textContent = text;
+  }
+
   function bindEvents() {
+    refs.logoutButton.addEventListener("click", () => {
+      lockApp();
+    });
+
     for (const tab of refs.viewTabs) {
       tab.addEventListener("click", () => {
         const target = tab.getAttribute("data-view-target");
@@ -2259,6 +2411,27 @@
     return new TextDecoder().decode(bytes);
   }
 
+  function createSalt() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return bytesToHex(bytes);
+  }
+
+  async function hashPassword(userId, password, salt) {
+    const input = `${userId}:${password}:${salt}`;
+    const encoded = new TextEncoder().encode(input);
+    const digest = await crypto.subtle.digest("SHA-256", encoded);
+    return bytesToHex(new Uint8Array(digest));
+  }
+
+  function bytesToHex(bytes) {
+    let hex = "";
+    for (const value of bytes) {
+      hex += value.toString(16).padStart(2, "0");
+    }
+    return hex;
+  }
+
   function setSyncStatus(text) {
     refs.syncStatus.textContent = text;
   }
@@ -2358,6 +2531,42 @@
       console.error(error);
       return cloneDefaultState();
     }
+  }
+
+  function loadAuthProfile() {
+    try {
+      const raw = localStorage.getItem(AUTH_PROFILE_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      if (!isObject(parsed)) {
+        return null;
+      }
+      if (
+        typeof parsed.userId !== "string" ||
+        !parsed.userId.trim() ||
+        typeof parsed.salt !== "string" ||
+        !parsed.salt ||
+        typeof parsed.passwordHash !== "string" ||
+        !parsed.passwordHash
+      ) {
+        return null;
+      }
+      return {
+        version: 1,
+        userId: parsed.userId.trim(),
+        salt: parsed.salt,
+        passwordHash: parsed.passwordHash,
+        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : ""
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function persistAuthProfile(profile) {
+    localStorage.setItem(AUTH_PROFILE_KEY, JSON.stringify(profile));
   }
 
   function persistState() {

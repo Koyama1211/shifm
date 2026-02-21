@@ -51,8 +51,33 @@ body {
   margin: 24px auto 40px;
 }
 
+.auth-screen {
+  width: min(460px, 92vw);
+  margin: 80px auto 40px;
+}
+
+.auth-card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  padding: 18px;
+}
+
+.auth-card h2 {
+  margin: 0;
+}
+
 .app-header {
   padding: 10px 4px;
+}
+
+.app-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .app-header h1 {
@@ -306,6 +331,8 @@ button {
 #pushCloud,
 #pullCloud,
 #pullCloudMerge,
+#logoutButton,
+#authToggleMode,
 #generateSyncProfile,
 #applySyncProfile,
 #exportBackup,
@@ -612,5 +639,9 @@ th {
   .summary-head {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .auth-screen {
+    margin-top: 28px;
   }
 }

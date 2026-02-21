@@ -14,9 +14,44 @@
     <div class="bg-shape bg-shape-a"></div>
     <div class="bg-shape bg-shape-b"></div>
 
-    <main class="container">
+    <section id="authScreen" class="auth-screen">
+      <div class="auth-card">
+        <h2 id="authTitle">ログイン</h2>
+        <p id="authDescription" class="section-note">利用前に認証してください。</p>
+        <form id="authForm">
+          <div class="field-row">
+            <label for="authUserId">ユーザーID</label>
+            <input id="authUserId" name="authUserId" type="text" autocomplete="username" required />
+          </div>
+          <div class="field-row">
+            <label for="authPassword">パスワード</label>
+            <input id="authPassword" name="authPassword" type="password" autocomplete="current-password" required />
+          </div>
+          <div id="authConfirmRow" class="field-row">
+            <label for="authPasswordConfirm">パスワード(確認)</label>
+            <input
+              id="authPasswordConfirm"
+              name="authPasswordConfirm"
+              type="password"
+              autocomplete="new-password"
+              required
+            />
+          </div>
+          <p id="authStatus" class="section-note"></p>
+          <div class="actions">
+            <button id="authSubmit" type="submit" class="primary">ログイン</button>
+            <button id="authToggleMode" type="button">新規登録に切替</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <main id="appMain" class="container" hidden>
       <header class="app-header">
-        <h1>個人バイトシフト管理</h1>
+        <div class="app-header-row">
+          <h1>個人バイトシフト管理</h1>
+          <button id="logoutButton" type="button">ログアウト</button>
+        </div>
         <p>カレンダーで管理しつつ、給与を自動計算</p>
       </header>
 
