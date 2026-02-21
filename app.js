@@ -23,8 +23,6 @@
     },
     sync: {
       userId: "",
-      autoSync: false,
-      autoPullOnOpen: true,
       lastSyncedAt: ""
     }
   };
@@ -162,14 +160,10 @@
     workplaceSummaryRows: document.getElementById("workplaceSummaryRows"),
     exportCsv: document.getElementById("exportCsv"),
 
-    syncForm: document.getElementById("syncForm"),
-    autoSync: document.getElementById("autoSync"),
-    autoPullOnOpen: document.getElementById("autoPullOnOpen"),
     exportBackup: document.getElementById("exportBackup"),
     importBackup: document.getElementById("importBackup"),
     backupFileInput: document.getElementById("backupFileInput"),
-    pushCloud: document.getElementById("pushCloud"),
-    pullCloud: document.getElementById("pullCloud"),
+    migrateLocalToCloud: document.getElementById("migrateLocalToCloud"),
     pullCloudMerge: document.getElementById("pullCloudMerge"),
     syncStatus: document.getElementById("syncStatus")
   };
@@ -330,6 +324,7 @@
 
   function lockApp(options) {
     const clearStatus = !options || options.clearStatus !== false;
+    clearTimeout(autoSyncTimer);
     refs.appMain.hidden = true;
     refs.authScreen.hidden = false;
     refs.logoutButton.hidden = true;
@@ -713,14 +708,6 @@
       exportMonthlyCsv(monthRows);
     });
 
-    refs.syncForm.addEventListener("submit", (event) => {
-      event.preventDefault();
-      state.sync.autoSync = refs.autoSync.checked;
-      state.sync.autoPullOnOpen = refs.autoPullOnOpen.checked;
-      persistState();
-      setSyncStatus("同期設定を保存しました。");
-    });
-
     refs.exportBackup.addEventListener("click", () => {
       exportBackupFile();
     });
@@ -733,12 +720,8 @@
       await importBackupFromFile();
     });
 
-    refs.pushCloud.addEventListener("click", async () => {
-      await pushToCloud({ silent: false });
-    });
-
-    refs.pullCloud.addEventListener("click", async () => {
-      await pullFromCloud("overwrite");
+    refs.migrateLocalToCloud.addEventListener("click", async () => {
+      await migrateLocalDataToCloud();
     });
 
     refs.pullCloudMerge.addEventListener("click", async () => {
@@ -1542,14 +1525,11 @@
   }
 
   function renderSyncForm() {
-    refs.autoSync.checked = Boolean(state.sync.autoSync);
-    refs.autoPullOnOpen.checked = state.sync.autoPullOnOpen !== false;
-
     if (state.sync.lastSyncedAt) {
-      setSyncStatus(`最終同期: ${formatDateTime(state.sync.lastSyncedAt)}`);
+      setSyncStatus(`自動同期中（最終保存: ${formatDateTime(state.sync.lastSyncedAt)}）`);
       return;
     }
-    setSyncStatus("同期未設定");
+    setSyncStatus("自動同期中（まだクラウド保存はありません）");
   }
 
   function renderSummary() {
@@ -2514,11 +2494,36 @@
     return null;
   }
 
+  async function migrateLocalDataToCloud() {
+    if (!hasAnyLocalUserData()) {
+      alert("移行対象のデータが見つかりません。");
+      return;
+    }
+
+    const ok = window.confirm(
+      "この端末の現在データをクラウドに移行します。クラウド側の同一アカウントデータは上書きされます。続行しますか？"
+    );
+    if (!ok) {
+      setSyncStatus("移行をキャンセルしました。");
+      return;
+    }
+
+    await pushToCloud({ silent: false });
+  }
+
+  function hasAnyLocalUserData() {
+    const hasShifts = Object.keys(normalizeShiftsMap(state.shifts)).length > 0;
+    const hasMasters = normalizeMasters(state.masters).length > 0;
+    return hasShifts || hasMasters;
+  }
+
   async function pushToCloud(options) {
     const silent = options && options.silent;
     try {
       const user = await requireSyncUser();
-      setSyncStatus("クラウドへ同期中...");
+      if (!silent) {
+        setSyncStatus("クラウドへ同期中...");
+      }
 
       const payload = buildSyncPayload();
       const nowIso = new Date().toISOString();
@@ -2539,9 +2544,10 @@
         alert("クラウド同期が完了しました。");
       }
     } catch (error) {
-      setSyncStatus(error.message);
+      const message = error instanceof Error ? error.message : "クラウド同期に失敗しました。";
+      setSyncStatus(message);
       if (!silent) {
-        alert(error.message);
+        alert(message);
       }
     }
   }
@@ -2549,9 +2555,12 @@
   async function pullFromCloud(mode, options) {
     const silent = options && options.silent;
     const skipConfirm = options && options.skipConfirm;
+    const allowEmpty = options && options.allowEmpty;
     try {
       const user = await requireSyncUser();
-      setSyncStatus("クラウドから取得中...");
+      if (!silent) {
+        setSyncStatus("クラウドから取得中...");
+      }
 
       const { data, error } = await supabaseClient
         .from(SUPABASE_SYNC_TABLE)
@@ -2562,7 +2571,11 @@
         throw new Error(toSupabaseSyncErrorMessage(error, "取得"));
       }
       if (!data || !data.payload) {
-        throw new Error("クラウド保存データがありません。先に「クラウドへ保存」を実行してください。");
+        if (allowEmpty) {
+          setSyncStatus("クラウドに保存データがないため、この端末データを自動保存します。");
+          return false;
+        }
+        throw new Error("クラウド保存データがありません。");
       }
 
       const parsed = isObject(data.payload) ? data.payload : JSON.parse(String(data.payload || "{}"));
@@ -2576,7 +2589,7 @@
         const ok = skipConfirm ? true : window.confirm(`クラウドのデータ (${remoteUpdatedAt}) で上書きしますか？`);
         if (!ok) {
           setSyncStatus("取得をキャンセルしました。");
-          return;
+          return false;
         }
 
         state.shifts = remoteShifts;
@@ -2601,20 +2614,24 @@
       if (!silent) {
         alert(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。");
       }
+      return true;
     } catch (error) {
-      setSyncStatus(error.message);
+      const message = error instanceof Error ? error.message : "クラウド取得に失敗しました。";
+      setSyncStatus(message);
       if (!silent) {
-        alert(error.message);
+        alert(message);
       }
+      return false;
     }
   }
 
   function queueAutoPullOnOpen() {
-    if (state.sync.autoPullOnOpen === false) {
-      return;
-    }
     setTimeout(() => {
-      pullFromCloud("merge", { silent: true }).catch(() => {});
+      pullFromCloud("merge", { silent: true, allowEmpty: true }).then((pulled) => {
+        if (!pulled) {
+          queueAutoSync("初回同期");
+        }
+      });
     }, 600);
   }
 
@@ -2751,7 +2768,7 @@
   }
 
   function queueAutoSync(reason) {
-    if (!state.sync.autoSync) {
+    if (!authenticatedUserId || !supabaseClient) {
       return;
     }
     clearTimeout(autoSyncTimer);
