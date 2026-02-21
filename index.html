@@ -419,6 +419,10 @@
                 </div>
               </div>
               <div class="field-row">
+                <label for="syncUserId">ユーザーID（任意）</label>
+                <input id="syncUserId" name="syncUserId" type="text" placeholder="例: koyama-main" autocomplete="off" />
+              </div>
+              <div class="field-row">
                 <label>
                   <input id="autoSync" name="autoSync" type="checkbox" />
                   保存時に自動同期する
@@ -429,6 +433,19 @@
                   <input id="autoPullOnOpen" name="autoPullOnOpen" type="checkbox" />
                   起動時に差分マージ取得する
                 </label>
+              </div>
+              <div class="field-row">
+                <label for="syncProfileCode">ログインコード（設定復元用）</label>
+                <textarea
+                  id="syncProfileCode"
+                  name="syncProfileCode"
+                  rows="3"
+                  placeholder="生成したコードを保管し、別端末で貼り付けて適用"
+                ></textarea>
+              </div>
+              <div class="actions">
+                <button id="generateSyncProfile" type="button">ログインコード生成</button>
+                <button id="applySyncProfile" type="button">ログインコード適用</button>
               </div>
               <div class="actions">
                 <button type="submit" class="primary">同期設定を保存</button>

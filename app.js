@@ -21,6 +21,7 @@
       githubToken: "",
       gistId: "",
       gistFilename: "shifm-data.json",
+      userId: "",
       autoSync: false,
       autoPullOnOpen: true,
       lastSyncedAt: ""
@@ -129,8 +130,12 @@
     githubToken: document.getElementById("githubToken"),
     gistId: document.getElementById("gistId"),
     gistFilename: document.getElementById("gistFilename"),
+    syncUserId: document.getElementById("syncUserId"),
     autoSync: document.getElementById("autoSync"),
     autoPullOnOpen: document.getElementById("autoPullOnOpen"),
+    syncProfileCode: document.getElementById("syncProfileCode"),
+    generateSyncProfile: document.getElementById("generateSyncProfile"),
+    applySyncProfile: document.getElementById("applySyncProfile"),
     exportBackup: document.getElementById("exportBackup"),
     importBackup: document.getElementById("importBackup"),
     backupFileInput: document.getElementById("backupFileInput"),
@@ -441,10 +446,19 @@
       state.sync.githubToken = refs.githubToken.value.trim();
       state.sync.gistId = refs.gistId.value.trim();
       state.sync.gistFilename = refs.gistFilename.value.trim() || "shifm-data.json";
+      state.sync.userId = refs.syncUserId.value.trim();
       state.sync.autoSync = refs.autoSync.checked;
       state.sync.autoPullOnOpen = refs.autoPullOnOpen.checked;
       persistState();
       setSyncStatus("同期設定を保存しました。");
+    });
+
+    refs.generateSyncProfile.addEventListener("click", async () => {
+      await generateSyncProfileCode();
+    });
+
+    refs.applySyncProfile.addEventListener("click", () => {
+      applySyncProfileCode();
     });
 
     refs.exportBackup.addEventListener("click", () => {
@@ -1123,6 +1137,7 @@
     refs.githubToken.value = state.sync.githubToken;
     refs.gistId.value = state.sync.gistId;
     refs.gistFilename.value = state.sync.gistFilename || "shifm-data.json";
+    refs.syncUserId.value = state.sync.userId || "";
     refs.autoSync.checked = Boolean(state.sync.autoSync);
     refs.autoPullOnOpen.checked = state.sync.autoPullOnOpen !== false;
 
@@ -2058,6 +2073,78 @@
     };
   }
 
+  function buildSyncProfilePayload() {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      userId: refs.syncUserId.value.trim(),
+      githubToken: refs.githubToken.value.trim(),
+      gistId: refs.gistId.value.trim(),
+      gistFilename: refs.gistFilename.value.trim() || "shifm-data.json",
+      autoSync: Boolean(refs.autoSync.checked),
+      autoPullOnOpen: Boolean(refs.autoPullOnOpen.checked)
+    };
+  }
+
+  async function generateSyncProfileCode() {
+    const payload = buildSyncProfilePayload();
+    if (!payload.githubToken || !payload.gistId) {
+      alert("Token と Gist ID を入力してから生成してください。");
+      return;
+    }
+
+    const code = encodeBase64Url(JSON.stringify(payload));
+    refs.syncProfileCode.value = code;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(code);
+        setSyncStatus("ログインコードを生成し、クリップボードにコピーしました。");
+      } else {
+        setSyncStatus("ログインコードを生成しました。");
+      }
+    } catch (error) {
+      setSyncStatus("ログインコードを生成しました。");
+    }
+  }
+
+  function applySyncProfileCode() {
+    const rawCode = refs.syncProfileCode.value.trim();
+    if (!rawCode) {
+      alert("ログインコードを貼り付けてください。");
+      return;
+    }
+
+    try {
+      const decoded = decodeBase64Url(rawCode);
+      const parsed = JSON.parse(decoded);
+      if (!isObject(parsed)) {
+        throw new Error("ログインコードが不正です。");
+      }
+
+      refs.githubToken.value = typeof parsed.githubToken === "string" ? parsed.githubToken : "";
+      refs.gistId.value = typeof parsed.gistId === "string" ? parsed.gistId : "";
+      refs.gistFilename.value = typeof parsed.gistFilename === "string" && parsed.gistFilename.trim()
+        ? parsed.gistFilename
+        : "shifm-data.json";
+      refs.syncUserId.value = typeof parsed.userId === "string" ? parsed.userId : "";
+      refs.autoSync.checked = parsed.autoSync !== false;
+      refs.autoPullOnOpen.checked = parsed.autoPullOnOpen !== false;
+
+      state.sync.githubToken = refs.githubToken.value.trim();
+      state.sync.gistId = refs.gistId.value.trim();
+      state.sync.gistFilename = refs.gistFilename.value.trim() || "shifm-data.json";
+      state.sync.userId = refs.syncUserId.value.trim();
+      state.sync.autoSync = refs.autoSync.checked;
+      state.sync.autoPullOnOpen = refs.autoPullOnOpen.checked;
+      persistState();
+      setSyncStatus("ログインコードを適用しました。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "ログインコードの適用に失敗しました。";
+      alert(message);
+      setSyncStatus(message);
+    }
+  }
+
   function exportBackupFile() {
     const payload = buildSyncPayload();
     const jsonText = JSON.stringify(payload, null, 2);
@@ -2150,6 +2237,26 @@
     const githubToken = state.sync.githubToken && state.sync.githubToken.trim();
     const gistId = state.sync.gistId && state.sync.gistId.trim();
     return Boolean(githubToken && gistId);
+  }
+
+  function encodeBase64Url(text) {
+    const bytes = new TextEncoder().encode(text);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function decodeBase64Url(text) {
+    const normalized = text.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "===".slice((normalized.length + 3) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
   }
 
   function setSyncStatus(text) {
