@@ -139,6 +139,26 @@
                 <label for="memo">メモ</label>
                 <input id="memo" name="memo" type="text" placeholder="例: まかないあり" />
               </div>
+              <details class="advanced-block">
+                <summary>タイミー専用入力</summary>
+                <div class="field-row">
+                  <label>
+                    <input id="timeeEnabled" name="timeeEnabled" type="checkbox" />
+                    タイミー案件として記録する
+                  </label>
+                </div>
+                <div class="field-row split">
+                  <div>
+                    <label for="timeeJobId">案件ID</label>
+                    <input id="timeeJobId" name="timeeJobId" type="text" placeholder="例: TMY-123456" />
+                  </div>
+                  <div>
+                    <label for="timeeFixedPay">総支給額(円)</label>
+                    <input id="timeeFixedPay" name="timeeFixedPay" type="number" min="0" step="1" />
+                  </div>
+                </div>
+                <p class="section-note">総支給額を入力すると、給与計算はその金額を優先します。</p>
+              </details>
               <div class="actions">
                 <button type="submit" class="primary">保存</button>
                 <button id="newShift" type="button">新規入力</button>

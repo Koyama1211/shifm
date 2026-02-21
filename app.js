@@ -87,6 +87,9 @@
     hourlyRate: document.getElementById("hourlyRate"),
     transport: document.getElementById("transport"),
     memo: document.getElementById("memo"),
+    timeeEnabled: document.getElementById("timeeEnabled"),
+    timeeJobId: document.getElementById("timeeJobId"),
+    timeeFixedPay: document.getElementById("timeeFixedPay"),
     newShift: document.getElementById("newShift"),
     saveAsMaster: document.getElementById("saveAsMaster"),
     deleteShift: document.getElementById("deleteShift"),
@@ -358,6 +361,10 @@
 
     refs.shiftPattern.addEventListener("change", () => {
       applySelectedShiftPattern();
+    });
+
+    refs.timeeEnabled.addEventListener("change", () => {
+      renderTimeeInputState();
     });
 
     refs.bulkWorkplaceMaster.addEventListener("change", () => {
@@ -647,6 +654,7 @@
     renderPatternList();
     renderWorkplaceMasterOptions();
     renderShiftPatternControls();
+    renderTimeeInputState();
     renderSummaryMasterFilterOptions();
     renderBulkForm();
     renderWorkplaceSuggestions();
@@ -796,12 +804,16 @@
     refs.hourlyRate.value = editing.hourlyRate;
     refs.transport.value = editing.transport;
     refs.memo.value = editing.memo || "";
+    refs.timeeEnabled.checked = Boolean(editing.timeeEnabled);
+    refs.timeeJobId.value = editing.timeeJobId || "";
+    refs.timeeFixedPay.value = editing.timeeFixedPay > 0 ? editing.timeeFixedPay : "";
 
     const matchedMasterId = resolveMasterIdForShift(editing);
     refs.workplaceMaster.value = matchedMasterId || "";
     refs.shiftLine.value = editing.lineName || "";
     refs.shiftPattern.value = editing.patternId || "";
     renderShiftPatternControls();
+    renderTimeeInputState();
 
     refs.editingStatus.textContent = "一覧から選択したシフトを編集中";
   }
@@ -832,12 +844,13 @@
       const title = shift.workplace ? shift.workplace : "勤務先未入力";
       const lineText = shift.lineName ? ` / ${shift.lineName}` : "";
       const patternText = shift.patternName ? ` / ${shift.patternName}` : "";
+      const timeeText = shift.timeeEnabled ? ` / タイミー${shift.timeeJobId ? `(${shift.timeeJobId})` : ""}` : "";
       const memo = shift.memo ? ` / ${shift.memo}` : "";
       li.innerHTML =
         '<div><div class="day-shift-title">' +
         escapeHtml(`${shift.startTime}-${shift.endTime}`) +
         '</div><div class="day-shift-sub">' +
-        escapeHtml(`${title}${lineText}${patternText}${memo}`) +
+        escapeHtml(`${title}${lineText}${patternText}${timeeText}${memo}`) +
         "</div></div>" +
         '<div class="day-shift-pay">' +
         escapeHtml(formatCurrency(result.gross)) +
@@ -1041,6 +1054,12 @@
 
     refs.shiftLine.disabled = lines.length === 0;
     refs.shiftPattern.disabled = filteredPatterns.length === 0;
+  }
+
+  function renderTimeeInputState() {
+    const enabled = Boolean(refs.timeeEnabled.checked);
+    refs.timeeJobId.disabled = !enabled;
+    refs.timeeFixedPay.disabled = !enabled;
   }
 
   function getMasterPatterns(master) {
@@ -1323,7 +1342,9 @@
       workedDates.add(row.dateKey);
 
       const tr = document.createElement("tr");
-      const workplaceText = row.shift.memo ? `${row.shift.workplace || "-"} (${row.shift.memo})` : row.shift.workplace || "-";
+      const workplaceBase = row.shift.workplace || "-";
+      const workplaceLabel = row.shift.timeeEnabled ? `タイミー / ${workplaceBase}` : workplaceBase;
+      const workplaceText = row.shift.memo ? `${workplaceLabel} (${row.shift.memo})` : workplaceLabel;
       tr.innerHTML =
         "<td>" +
         escapeHtml(row.dateKey) +
@@ -1448,6 +1469,9 @@
     refs.hourlyRate.value = state.settings.defaultHourlyRate;
     refs.transport.value = 0;
     refs.memo.value = "";
+    refs.timeeEnabled.checked = false;
+    refs.timeeJobId.value = "";
+    refs.timeeFixedPay.value = "";
 
     const preferredMaster = getMasterById(preferredWorkplaceMasterId);
     if (preferredMaster) {
@@ -1461,6 +1485,7 @@
       refs.workplaceMaster.value = "";
     }
     renderShiftPatternControls();
+    renderTimeeInputState();
 
     if (resetAll) {
       refs.editingStatus.textContent = "新規シフトを入力中";
@@ -1473,6 +1498,7 @@
       ? getMasterPatterns(selectedMaster).find((item) => item.id === refs.shiftPattern.value)
       : null;
     const lineNameFromForm = refs.shiftLine.value.trim();
+    const timeeEnabled = Boolean(refs.timeeEnabled.checked);
     const shift = {
       workplace: refs.workplace.value.trim(),
       workplaceMasterId: selectedMaster ? selectedMaster.id : "",
@@ -1484,7 +1510,10 @@
       breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
       hourlyRate: toNonNegativeNumber(refs.hourlyRate.value, state.settings.defaultHourlyRate),
       transport: toNonNegativeNumber(refs.transport.value, 0),
-      memo: refs.memo.value.trim()
+      memo: refs.memo.value.trim(),
+      timeeEnabled,
+      timeeJobId: timeeEnabled ? refs.timeeJobId.value.trim() : "",
+      timeeFixedPay: timeeEnabled ? toNonNegativeNumber(refs.timeeFixedPay.value, 0) : 0
     };
 
     if (selectedPattern && selectedPattern.lineName) {
@@ -1971,9 +2000,14 @@
     const regularMinutes = Math.min(workedMinutes, overtimeStart);
     const overtimeMinutes = Math.max(0, workedMinutes - overtimeStart);
 
-    const regularPay = (regularMinutes / 60) * shift.hourlyRate;
-    const overtimePay = (overtimeMinutes / 60) * shift.hourlyRate * policy.overtimeMultiplier;
-    const gross = Math.round(regularPay + overtimePay + shift.transport);
+    let gross;
+    if (shift.timeeEnabled && shift.timeeFixedPay > 0) {
+      gross = Math.round(shift.timeeFixedPay);
+    } else {
+      const regularPay = (regularMinutes / 60) * shift.hourlyRate;
+      const overtimePay = (overtimeMinutes / 60) * shift.hourlyRate * policy.overtimeMultiplier;
+      gross = Math.round(regularPay + overtimePay + shift.transport);
+    }
     const net = Math.round(gross * (1 - policy.taxRate / 100));
 
     return {
@@ -2026,6 +2060,10 @@
     url.searchParams.set(
       "details",
       `勤務: ${shift.startTime}-${shift.endTime}\n休憩: ${shift.breakMinutes}分\n時給: ${shift.hourlyRate}円${
+        shift.timeeEnabled ? `\nタイミー案件ID: ${shift.timeeJobId || "-"}` : ""
+      }${
+        shift.timeeEnabled && shift.timeeFixedPay > 0 ? `\nタイミー総支給額: ${shift.timeeFixedPay}円` : ""
+      }${
         shift.memo ? `\nメモ: ${shift.memo}` : ""
       }`
     );
@@ -2449,6 +2487,9 @@
       "休憩(分)",
       "時給",
       "交通費",
+      "タイミー案件",
+      "タイミー案件ID",
+      "タイミー総支給額",
       "メモ",
       "労働時間(時間)",
       "支給額",
@@ -2471,6 +2512,9 @@
         row.shift.breakMinutes,
         row.shift.hourlyRate,
         row.shift.transport,
+        row.shift.timeeEnabled ? "はい" : "いいえ",
+        row.shift.timeeJobId || "",
+        row.shift.timeeFixedPay || 0,
         row.shift.memo || "",
         (row.result.workedMinutes / 60).toFixed(2),
         row.result.gross,
@@ -2637,7 +2681,10 @@
       breakMinutes: toNonNegativeNumber(raw.breakMinutes, 0),
       hourlyRate: toPositiveNumber(raw.hourlyRate, defaultState.settings.defaultHourlyRate),
       transport: toNonNegativeNumber(raw.transport, 0),
-      memo: typeof raw.memo === "string" ? raw.memo : ""
+      memo: typeof raw.memo === "string" ? raw.memo : "",
+      timeeEnabled: Boolean(raw.timeeEnabled),
+      timeeJobId: typeof raw.timeeJobId === "string" ? raw.timeeJobId.trim() : "",
+      timeeFixedPay: toNonNegativeNumber(raw.timeeFixedPay, 0)
     };
   }
 
