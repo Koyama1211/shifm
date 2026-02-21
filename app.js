@@ -8,6 +8,8 @@
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubWNjYmNqY2Flc2F2Z3ltcnpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NzUwMTAsImV4cCI6MjA4NzI1MTAxMH0.a3fhvtRGv_Mccb7N8T4T5n0RLFJ8mhpO2iae1zuzQw4";
   const SUPABASE_SYNC_TABLE = "shifm_sync";
+  const TIMEE_MASTER_OPTION_ID = "__timee_option__";
+  const TIMEE_MASTER_OPTION_LABEL = "Timee（都度入力）";
   const LEGACY_STORAGE_KEYS = ["shifm_store_v2", "shifm_store_v1"];
   const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
   const VIEW_NAMES = ["shift", "summary", "settings", "sync"];
@@ -132,7 +134,6 @@
     masterForm: document.getElementById("masterForm"),
     masterId: document.getElementById("masterId"),
     masterName: document.getElementById("masterName"),
-    masterIsTimee: document.getElementById("masterIsTimee"),
     masterOvertimeThreshold: document.getElementById("masterOvertimeThreshold"),
     masterOvertimeMultiplier: document.getElementById("masterOvertimeMultiplier"),
     masterTaxRate: document.getElementById("masterTaxRate"),
@@ -444,6 +445,20 @@
         renderShiftPatternControls();
         renderShiftPreview();
         persistUiState();
+        return;
+      }
+      if (isTimeeMasterOptionId(masterId)) {
+        refs.shiftLine.value = "";
+        refs.shiftPattern.value = "";
+        refs.workplace.value = "";
+        refs.timeeEnabled.checked = true;
+        refs.hourlyRate.value = "";
+        refs.transport.value = 0;
+        preferredWorkplaceMasterId = "";
+        persistUiState();
+        renderShiftPatternControls();
+        renderTimeeInputState();
+        renderShiftPreview();
         return;
       }
       applyMasterToShiftForm(masterId, { override: true, remember: true });
@@ -1061,7 +1076,6 @@
     if (!selected) {
       refs.masterId.value = "";
       refs.masterName.value = "";
-      refs.masterIsTimee.checked = false;
       refs.masterOvertimeThreshold.value = state.settings.overtimeThreshold;
       refs.masterOvertimeMultiplier.value = state.settings.overtimeMultiplier;
       refs.masterTaxRate.value = state.settings.taxRate;
@@ -1074,7 +1088,6 @@
 
     refs.masterId.value = selected.id;
     refs.masterName.value = selected.name;
-    refs.masterIsTimee.checked = isTimeeMasterEntry(selected);
     refs.masterOvertimeThreshold.value = selected.overtimeThreshold;
     refs.masterOvertimeMultiplier.value = selected.overtimeMultiplier;
     refs.masterTaxRate.value = selected.taxRate;
@@ -1480,17 +1493,25 @@
   }
 
   function renderWorkplaceMasterOptions() {
-    renderMasterSelectOptions(refs.workplaceMaster);
+    renderMasterSelectOptions(refs.workplaceMaster, "未選択", { includeTimeeOption: true });
     renderMasterSelectOptions(refs.bulkWorkplaceMaster);
-    renderMasterSelectOptions(refs.payrollWorkplaceMaster, "勤務先を選択");
+    renderMasterSelectOptions(refs.payrollWorkplaceMaster, "勤務先を選択", { includeTimeeOption: true });
   }
 
-  function renderMasterSelectOptions(selectElement, emptyLabel) {
+  function renderMasterSelectOptions(selectElement, emptyLabel, options) {
     if (!selectElement) {
       return;
     }
+    const includeTimeeOption = Boolean(options && options.includeTimeeOption);
     const previousValue = selectElement.value;
     selectElement.innerHTML = `<option value="">${escapeHtml(emptyLabel || "未選択")}</option>`;
+
+    if (includeTimeeOption) {
+      const timeeOption = document.createElement("option");
+      timeeOption.value = TIMEE_MASTER_OPTION_ID;
+      timeeOption.textContent = TIMEE_MASTER_OPTION_LABEL;
+      selectElement.appendChild(timeeOption);
+    }
 
     const masters = sortMasters(state.masters);
     for (const master of masters) {
@@ -1502,7 +1523,7 @@
       selectElement.appendChild(option);
     }
 
-    if (previousValue && getMasterById(previousValue)) {
+    if (previousValue && (getMasterById(previousValue) || (includeTimeeOption && isTimeeMasterOptionId(previousValue)))) {
       selectElement.value = previousValue;
     }
   }
@@ -1510,6 +1531,15 @@
   function renderSummaryMasterFilterOptions() {
     const previousValue = normalizeSummaryMasterFilter(summaryMasterFilter);
     refs.summaryMasterFilter.innerHTML = '<option value="all">全勤務先</option>';
+    const hasTimeeShift = Object.values(state.shifts).some((shifts) =>
+      normalizeShiftsOfDay("", shifts).some((shift) => isTimeeMasterOptionId(resolveMasterIdForShift(shift)))
+    );
+    if (hasTimeeShift) {
+      const timeeOption = document.createElement("option");
+      timeeOption.value = TIMEE_MASTER_OPTION_ID;
+      timeeOption.textContent = "Timee";
+      refs.summaryMasterFilter.appendChild(timeeOption);
+    }
 
     const masters = sortMasters(state.masters);
     for (const master of masters) {
@@ -1552,7 +1582,11 @@
 
     for (const record of records) {
       const master = getMasterById(record.workplaceMasterId);
-      const label = master ? master.name : "削除済み勤務先";
+      const label = isTimeeMasterOptionId(record.workplaceMasterId)
+        ? "Timee"
+        : master
+          ? master.name
+          : "削除済み勤務先";
       const li = document.createElement("li");
       li.className = "pattern-item";
       li.innerHTML =
@@ -1585,7 +1619,7 @@
     }
 
     const workplaceMasterId = refs.payrollWorkplaceMaster.value;
-    if (!workplaceMasterId || !getMasterById(workplaceMasterId)) {
+    if (!workplaceMasterId || (!getMasterById(workplaceMasterId) && !isTimeeMasterOptionId(workplaceMasterId))) {
       alert("勤務先マスタを選択してください。");
       return;
     }
@@ -1966,7 +2000,9 @@
   }
 
   function buildShiftFromForm() {
-    const selectedMaster = getMasterById(refs.workplaceMaster.value);
+    const selectedMasterIdRaw = refs.workplaceMaster.value;
+    const selectedMaster = getMasterById(selectedMasterIdRaw);
+    const selectedTimeeOption = isTimeeMasterOptionId(selectedMasterIdRaw);
     const selectedPattern = selectedMaster
       ? getMasterPatterns(selectedMaster).find((item) => item.id === refs.shiftPattern.value)
       : null;
@@ -1984,7 +2020,7 @@
     const transportInput = toNonNegativeNumber(refs.transport.value, 0);
     const shift = {
       workplace: refs.workplace.value.trim(),
-      workplaceMasterId: selectedMaster ? selectedMaster.id : "",
+      workplaceMasterId: selectedMaster ? selectedMaster.id : selectedTimeeOption ? TIMEE_MASTER_OPTION_ID : "",
       lineName: lineNameFromForm,
       patternId: selectedPattern ? selectedPattern.id : "",
       patternName: selectedPattern ? selectedPattern.name : "",
@@ -2012,7 +2048,7 @@
       throw new Error(timeeEnabled ? "タイミー案件先の勤務先名を入力してください。" : "勤務先を入力してください。");
     }
 
-    if (!shift.workplaceMasterId) {
+    if (!shift.workplaceMasterId && !shift.timeeEnabled) {
       const matchedByName = findMasterByName(shift.workplace);
       if (matchedByName) {
         shift.workplaceMasterId = matchedByName.id;
@@ -2380,7 +2416,6 @@
   function saveMasterFromForm() {
     const idFromForm = refs.masterId.value.trim();
     const name = refs.masterName.value.trim();
-    const isTimee = Boolean(refs.masterIsTimee.checked);
     const overtimeThreshold = toNonNegativeNumber(refs.masterOvertimeThreshold.value, state.settings.overtimeThreshold);
     const overtimeMultiplier = Math.max(1, toPositiveNumber(refs.masterOvertimeMultiplier.value, state.settings.overtimeMultiplier));
     const taxRate = clamp(toNonNegativeNumber(refs.masterTaxRate.value, state.settings.taxRate), 0, 100);
@@ -2406,6 +2441,7 @@
           }
         ];
     const currentRate = resolvePayRateForDate(rates, toDateKey(new Date()));
+    const isTimee = Boolean((inheritedSource && inheritedSource.isTimee) || isTimeeWorkplaceName(name));
 
     const master = {
       id: targetId,
@@ -3480,6 +3516,9 @@
   }
 
   function resolveMasterIdForShift(shift) {
+    if (shift.workplaceMasterId && isTimeeMasterOptionId(shift.workplaceMasterId)) {
+      return shift.workplaceMasterId;
+    }
     if (shift.workplaceMasterId && getMasterById(shift.workplaceMasterId)) {
       return shift.workplaceMasterId;
     }
@@ -3583,10 +3622,12 @@
 
   function syncTimeeModeByWorkplace() {
     const wasEnabled = Boolean(refs.timeeEnabled.checked);
-    const master = getMasterById(refs.workplaceMaster.value);
+    const selectedMasterIdRaw = refs.workplaceMaster.value;
+    const master = getMasterById(selectedMasterIdRaw);
     const fromMaster = master ? master.name : "";
     const fromInput = refs.workplace.value;
-    const masterIsTimee = master ? isTimeeMasterEntry(master) : isTimeeWorkplaceName(fromMaster);
+    const masterIsTimee =
+      isTimeeMasterOptionId(selectedMasterIdRaw) || (master ? isTimeeMasterEntry(master) : isTimeeWorkplaceName(fromMaster));
     const enabled = masterIsTimee || isTimeeWorkplaceName(fromInput);
     refs.timeeEnabled.checked = enabled;
 
@@ -3845,6 +3886,10 @@
       return value;
     }
     return "list";
+  }
+
+  function isTimeeMasterOptionId(value) {
+    return value === TIMEE_MASTER_OPTION_ID;
   }
 
   function parseMonthKey(value) {
