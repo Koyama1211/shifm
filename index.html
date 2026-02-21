@@ -475,7 +475,7 @@
 
       <section class="view-section" data-view="sync">
         <section class="panel sync-panel">
-          <h3>端末同期 (GitHub Gist)</h3>
+          <h3>端末同期 (Supabase)</h3>
           <p class="section-note">通常運用は「クラウドへ保存」「クラウドから取得」だけで完結します。</p>
           <div class="actions">
             <button id="pushCloud" type="button">クラウドへ保存</button>
@@ -484,30 +484,7 @@
           <p id="syncStatus">同期未設定</p>
           <details class="advanced-block">
             <summary>同期詳細設定（低頻度）</summary>
-            <div class="actions advanced-actions">
-              <button id="exportBackup" type="button">バックアップ書き出し</button>
-              <button id="importBackup" type="button">バックアップ読み込み</button>
-            </div>
-            <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
             <form id="syncForm">
-              <div class="field-row">
-                <label for="githubToken">GitHub Personal Access Token</label>
-                <input id="githubToken" name="githubToken" type="password" autocomplete="off" />
-              </div>
-              <div class="field-row split">
-                <div>
-                  <label for="gistId">Gist ID</label>
-                  <input id="gistId" name="gistId" type="text" placeholder="32文字程度のID" autocomplete="off" />
-                </div>
-                <div>
-                  <label for="gistFilename">ファイル名</label>
-                  <input id="gistFilename" name="gistFilename" type="text" value="shifm-data.json" />
-                </div>
-              </div>
-              <div class="field-row">
-                <label for="syncUserId">ユーザーID（任意）</label>
-                <input id="syncUserId" name="syncUserId" type="text" placeholder="例: koyama-main" autocomplete="off" />
-              </div>
               <div class="field-row">
                 <label>
                   <input id="autoSync" name="autoSync" type="checkbox" />
@@ -520,24 +497,16 @@
                   起動時に差分マージ取得する
                 </label>
               </div>
-              <div class="field-row">
-                <label for="syncProfileCode">ログインコード（設定復元用）</label>
-                <textarea
-                  id="syncProfileCode"
-                  name="syncProfileCode"
-                  rows="3"
-                  placeholder="生成したコードを保管し、別端末で貼り付けて適用"
-                ></textarea>
-              </div>
-              <div class="actions">
-                <button id="generateSyncProfile" type="button">ログインコード生成</button>
-                <button id="applySyncProfile" type="button">ログインコード適用</button>
-              </div>
               <div class="actions">
                 <button type="submit" class="primary">同期設定を保存</button>
                 <button id="pullCloudMerge" type="button">差分マージ取得</button>
               </div>
             </form>
+            <div class="actions advanced-actions">
+              <button id="exportBackup" type="button">バックアップ書き出し</button>
+              <button id="importBackup" type="button">バックアップ読み込み</button>
+            </div>
+            <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
           </details>
         </section>
       </section>

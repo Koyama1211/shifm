@@ -7,6 +7,7 @@
   const SUPABASE_URL = "https://vnmccbcjcaesavgymrzd.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubWNjYmNqY2Flc2F2Z3ltcnpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NzUwMTAsImV4cCI6MjA4NzI1MTAxMH0.a3fhvtRGv_Mccb7N8T4T5n0RLFJ8mhpO2iae1zuzQw4";
+  const SUPABASE_SYNC_TABLE = "shifm_sync";
   const LEGACY_STORAGE_KEYS = ["shifm_store_v2", "shifm_store_v1"];
   const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
   const VIEW_NAMES = ["shift", "summary", "settings", "sync"];
@@ -21,9 +22,6 @@
       taxRate: 0
     },
     sync: {
-      githubToken: "",
-      gistId: "",
-      gistFilename: "shifm-data.json",
       userId: "",
       autoSync: false,
       autoPullOnOpen: true,
@@ -165,15 +163,8 @@
     exportCsv: document.getElementById("exportCsv"),
 
     syncForm: document.getElementById("syncForm"),
-    githubToken: document.getElementById("githubToken"),
-    gistId: document.getElementById("gistId"),
-    gistFilename: document.getElementById("gistFilename"),
-    syncUserId: document.getElementById("syncUserId"),
     autoSync: document.getElementById("autoSync"),
     autoPullOnOpen: document.getElementById("autoPullOnOpen"),
-    syncProfileCode: document.getElementById("syncProfileCode"),
-    generateSyncProfile: document.getElementById("generateSyncProfile"),
-    applySyncProfile: document.getElementById("applySyncProfile"),
     exportBackup: document.getElementById("exportBackup"),
     importBackup: document.getElementById("importBackup"),
     backupFileInput: document.getElementById("backupFileInput"),
@@ -188,18 +179,23 @@
   });
 
   async function init() {
-    initSupabase();
+    const supabaseReady = initSupabase();
     bindAuthEvents();
     renderAuthView();
     updateCurrentUserLabel();
     bindEvents();
     registerServiceWorker();
+    if (!supabaseReady) {
+      lockApp({ clearStatus: false });
+      return;
+    }
     await restoreSupabaseSession();
   }
 
   function initSupabase() {
     if (!window.supabase || typeof window.supabase.createClient !== "function") {
-      throw new Error("Supabase SDKの読み込みに失敗しました。");
+      setAuthStatus("Supabase SDKの読み込みに失敗しました。通信環境を確認して再読み込みしてください。");
+      return false;
     }
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     supabaseClient.auth.onAuthStateChange((event, session) => {
@@ -211,6 +207,7 @@
       authenticatedUserId = "";
       lockApp({ clearStatus: false });
     });
+    return true;
   }
 
   async function restoreSupabaseSession() {
@@ -718,22 +715,10 @@
 
     refs.syncForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      state.sync.githubToken = refs.githubToken.value.trim();
-      state.sync.gistId = refs.gistId.value.trim();
-      state.sync.gistFilename = refs.gistFilename.value.trim() || "shifm-data.json";
-      state.sync.userId = refs.syncUserId.value.trim();
       state.sync.autoSync = refs.autoSync.checked;
       state.sync.autoPullOnOpen = refs.autoPullOnOpen.checked;
       persistState();
       setSyncStatus("同期設定を保存しました。");
-    });
-
-    refs.generateSyncProfile.addEventListener("click", async () => {
-      await generateSyncProfileCode();
-    });
-
-    refs.applySyncProfile.addEventListener("click", () => {
-      applySyncProfileCode();
     });
 
     refs.exportBackup.addEventListener("click", () => {
@@ -1557,10 +1542,6 @@
   }
 
   function renderSyncForm() {
-    refs.githubToken.value = state.sync.githubToken;
-    refs.gistId.value = state.sync.gistId;
-    refs.gistFilename.value = state.sync.gistFilename || "shifm-data.json";
-    refs.syncUserId.value = state.sync.userId || "";
     refs.autoSync.checked = Boolean(state.sync.autoSync);
     refs.autoPullOnOpen.checked = state.sync.autoPullOnOpen !== false;
 
@@ -2536,32 +2517,22 @@
   async function pushToCloud(options) {
     const silent = options && options.silent;
     try {
-      const config = requireSyncConfig();
+      const user = await requireSyncUser();
       setSyncStatus("クラウドへ同期中...");
 
       const payload = buildSyncPayload();
+      const nowIso = new Date().toISOString();
 
-      const response = await fetch(`https://api.github.com/gists/${config.gistId}`, {
-        method: "PATCH",
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${config.githubToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          files: {
-            [config.gistFilename]: {
-              content: JSON.stringify(payload, null, 2)
-            }
-          }
-        })
+      const { error } = await supabaseClient.from(SUPABASE_SYNC_TABLE).upsert({
+        user_id: user.id,
+        payload,
+        updated_at: nowIso
       });
-
-      if (!response.ok) {
-        throw new Error(`同期失敗 (${response.status})`);
+      if (error) {
+        throw new Error(toSupabaseSyncErrorMessage(error, "同期"));
       }
 
-      state.sync.lastSyncedAt = new Date().toISOString();
+      state.sync.lastSyncedAt = nowIso;
       persistState();
       setSyncStatus(`クラウドに保存しました (${formatDateTime(state.sync.lastSyncedAt)})`);
       if (!silent) {
@@ -2579,32 +2550,27 @@
     const silent = options && options.silent;
     const skipConfirm = options && options.skipConfirm;
     try {
-      const config = requireSyncConfig();
+      const user = await requireSyncUser();
       setSyncStatus("クラウドから取得中...");
 
-      const response = await fetch(`https://api.github.com/gists/${config.gistId}`, {
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${config.githubToken}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`取得失敗 (${response.status})`);
+      const { data, error } = await supabaseClient
+        .from(SUPABASE_SYNC_TABLE)
+        .select("payload,updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (error) {
+        throw new Error(toSupabaseSyncErrorMessage(error, "取得"));
+      }
+      if (!data || !data.payload) {
+        throw new Error("クラウド保存データがありません。先に「クラウドへ保存」を実行してください。");
       }
 
-      const gist = await response.json();
-      const file = gist.files && gist.files[config.gistFilename];
-      if (!file || typeof file.content !== "string") {
-        throw new Error("指定ファイルがGistに見つかりません。");
-      }
-
-      const parsed = JSON.parse(file.content);
+      const parsed = isObject(data.payload) ? data.payload : JSON.parse(String(data.payload || "{}"));
       const remoteData = parsed && parsed.data ? parsed.data : {};
       const remoteShifts = normalizeShiftsMap(remoteData.shifts);
       const remoteMasters = normalizeMasters(remoteData.masters);
       const remoteSettings = isObject(remoteData.settings) ? remoteData.settings : {};
-      const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : "不明";
+      const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : data.updated_at || "不明";
 
       if (mode === "overwrite") {
         const ok = skipConfirm ? true : window.confirm(`クラウドのデータ (${remoteUpdatedAt}) で上書きしますか？`);
@@ -2645,9 +2611,6 @@
 
   function queueAutoPullOnOpen() {
     if (state.sync.autoPullOnOpen === false) {
-      return;
-    }
-    if (!hasSyncConfig()) {
       return;
     }
     setTimeout(() => {
@@ -2712,7 +2675,7 @@
 
   function buildSyncPayload() {
     return {
-      version: 7,
+      version: 8,
       updatedAt: new Date().toISOString(),
       data: {
         shifts: state.shifts,
@@ -2720,78 +2683,6 @@
         settings: state.settings
       }
     };
-  }
-
-  function buildSyncProfilePayload() {
-    return {
-      version: 1,
-      updatedAt: new Date().toISOString(),
-      userId: refs.syncUserId.value.trim(),
-      githubToken: refs.githubToken.value.trim(),
-      gistId: refs.gistId.value.trim(),
-      gistFilename: refs.gistFilename.value.trim() || "shifm-data.json",
-      autoSync: Boolean(refs.autoSync.checked),
-      autoPullOnOpen: Boolean(refs.autoPullOnOpen.checked)
-    };
-  }
-
-  async function generateSyncProfileCode() {
-    const payload = buildSyncProfilePayload();
-    if (!payload.githubToken || !payload.gistId) {
-      alert("Token と Gist ID を入力してから生成してください。");
-      return;
-    }
-
-    const code = encodeBase64Url(JSON.stringify(payload));
-    refs.syncProfileCode.value = code;
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(code);
-        setSyncStatus("ログインコードを生成し、クリップボードにコピーしました。");
-      } else {
-        setSyncStatus("ログインコードを生成しました。");
-      }
-    } catch (error) {
-      setSyncStatus("ログインコードを生成しました。");
-    }
-  }
-
-  function applySyncProfileCode() {
-    const rawCode = refs.syncProfileCode.value.trim();
-    if (!rawCode) {
-      alert("ログインコードを貼り付けてください。");
-      return;
-    }
-
-    try {
-      const decoded = decodeBase64Url(rawCode);
-      const parsed = JSON.parse(decoded);
-      if (!isObject(parsed)) {
-        throw new Error("ログインコードが不正です。");
-      }
-
-      refs.githubToken.value = typeof parsed.githubToken === "string" ? parsed.githubToken : "";
-      refs.gistId.value = typeof parsed.gistId === "string" ? parsed.gistId : "";
-      refs.gistFilename.value = typeof parsed.gistFilename === "string" && parsed.gistFilename.trim()
-        ? parsed.gistFilename
-        : "shifm-data.json";
-      refs.syncUserId.value = typeof parsed.userId === "string" ? parsed.userId : "";
-      refs.autoSync.checked = parsed.autoSync !== false;
-      refs.autoPullOnOpen.checked = parsed.autoPullOnOpen !== false;
-
-      state.sync.githubToken = refs.githubToken.value.trim();
-      state.sync.gistId = refs.gistId.value.trim();
-      state.sync.gistFilename = refs.gistFilename.value.trim() || "shifm-data.json";
-      state.sync.userId = refs.syncUserId.value.trim();
-      state.sync.autoSync = refs.autoSync.checked;
-      state.sync.autoPullOnOpen = refs.autoPullOnOpen.checked;
-      persistState();
-      setSyncStatus("ログインコードを適用しました。");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "ログインコードの適用に失敗しました。";
-      alert(message);
-      setSyncStatus(message);
-    }
   }
 
   function exportBackupFile() {
@@ -2870,42 +2761,23 @@
     setSyncStatus(`${reason}: 自動同期を予約しました...`);
   }
 
-  function requireSyncConfig() {
-    const githubToken = state.sync.githubToken && state.sync.githubToken.trim();
-    const gistId = state.sync.gistId && state.sync.gistId.trim();
-    const gistFilename = (state.sync.gistFilename && state.sync.gistFilename.trim()) || "shifm-data.json";
-
-    if (!githubToken || !gistId) {
-      throw new Error("Token と Gist ID を同期設定に入力してください。");
+  async function requireSyncUser() {
+    const { data, error } = await supabaseClient.auth.getUser();
+    if (error || !data || !data.user) {
+      throw new Error("同期するにはログインが必要です。");
     }
-
-    return { githubToken, gistId, gistFilename };
+    return data.user;
   }
 
-  function hasSyncConfig() {
-    const githubToken = state.sync.githubToken && state.sync.githubToken.trim();
-    const gistId = state.sync.gistId && state.sync.gistId.trim();
-    return Boolean(githubToken && gistId);
-  }
-
-  function encodeBase64Url(text) {
-    const bytes = new TextEncoder().encode(text);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 1) {
-      binary += String.fromCharCode(bytes[i]);
+  function toSupabaseSyncErrorMessage(error, actionLabel) {
+    const message = error && typeof error.message === "string" ? error.message : `${actionLabel}に失敗しました。`;
+    if (message.includes("relation") && message.includes("does not exist")) {
+      return `${actionLabel}に失敗しました。Supabaseテーブル「${SUPABASE_SYNC_TABLE}」の作成が必要です。`;
     }
-    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  }
-
-  function decodeBase64Url(text) {
-    const normalized = text.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "===".slice((normalized.length + 3) % 4);
-    const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
+    if (message.includes("permission denied") || message.includes("row-level security")) {
+      return `${actionLabel}に失敗しました。SupabaseのRLSポリシーを確認してください。`;
     }
-    return new TextDecoder().decode(bytes);
+    return `${actionLabel}に失敗しました: ${message}`;
   }
 
   function setSyncStatus(text) {

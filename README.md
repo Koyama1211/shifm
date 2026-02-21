@@ -21,10 +21,9 @@
 - 勤務先フィルタ付き月次サマリー + 勤務先別内訳
 - 月次CSV出力
 - Google Calendar 登録 (選択シフト or 当日分を登録画面に自動入力)
-- PC/スマホ同期 (GitHub Gist 利用 / 上書き取得・差分マージ取得)
+- PC/スマホ同期 (Supabaseユーザーごと / 上書き取得・差分マージ取得)
 - 自動同期オプション (保存時自動同期 / 起動時差分マージ取得)
-- ログインコード機能 (ユーザーID付き同期設定を一発復元)
-- GitHub設定なしのかんたん移行 (バックアップ書き出し/読み込み)
+- バックアップ書き出し/読み込み
 - PWA対応 (ホーム画面追加・オフライン時の基本表示)
 - タブ型UIで機能分離 (`シフト` / `月次サマリー` / `設定` / `同期`)
 - 低頻度機能の分離 (補助機能・一括登録・同期詳細を段階開示)
@@ -51,32 +50,44 @@
 13. Googleカレンダー登録やマスタ保存など低頻度操作は、`シフト` タブの `補助機能（低頻度）` から実行する。
 14. 毎週同じ勤務が多い場合は、`シフト` タブの `定型シフト一括登録（週次）` で曜日・期間を指定して一括作成する。
 
-## PC/スマホ同期の設定
+## PC/スマホ同期の設定（Supabase）
 
-このアプリは GitHub Gist を保存先に使って同期できます。
+このアプリは Supabase のログインユーザーごとに同期します。
 
-1. GitHub で非公開 Gist を1つ作成する。
-2. Personal Access Token を作成する。
-3. アプリの `同期` タブで `同期詳細設定（Token/Gist/差分マージ）` を開き、以下を入力する。
-   - Token
-   - Gist ID
-   - ファイル名 (例: `shifm-data.json`)
-4. `クラウドへ保存` でアップロード。
-5. 別端末でも同じ設定を入力し `クラウドから取得` を押す。
-6. 既存データを残したいときは `同期詳細設定` 内の `差分マージ取得` を使う。
+1. 同じメールアドレス/パスワードで各端末にログインする。
+2. Supabase SQL Editor で以下を実行し、同期テーブルを作成する。
 
-必要であれば `保存時に自動同期する` を有効化できます。
-さらに手動取得を減らしたい場合は `起動時に差分マージ取得する` を有効化してください。
+```sql
+create table if not exists public.shifm_sync (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload jsonb not null,
+  updated_at timestamptz not null default now()
+);
 
-## PAT再入力を減らす方法（ログインコード）
+alter table public.shifm_sync enable row level security;
 
-1. `同期` タブの `同期詳細設定` で Token/Gist を入力する。
-2. 任意で `ユーザーID` を入力する。
-3. `ログインコード生成` を押す（クリップボードにもコピーされます）。
-4. 生成されたコードをメモアプリやパスワード管理に保存する。
-5. 別ブラウザやキャッシュ削除後は、`ログインコード` を貼り付けて `ログインコード適用` を押す。
+create policy if not exists "select own sync"
+on public.shifm_sync
+for select
+using (auth.uid() = user_id);
 
-注意: ログインコードには Token が含まれるため、他人に共有しないでください。
+create policy if not exists "insert own sync"
+on public.shifm_sync
+for insert
+with check (auth.uid() = user_id);
+
+create policy if not exists "update own sync"
+on public.shifm_sync
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+```
+
+3. `同期` タブで `クラウドへ保存` を押す。
+4. 別端末で同じアカウントにログインし `クラウドから取得` を押す。
+5. 既存データを残したいときは `差分マージ取得` を使う。
+
+必要であれば `保存時に自動同期する` と `起動時に差分マージ取得する` を有効化できます。
 
 ## GitHubなしで端末移行する方法
 
@@ -93,7 +104,6 @@
 
 ## 注意点
 
-- Token は端末の `localStorage` に保存されます。個人利用専用で使ってください。
 - Google Calendar は登録画面を開く方式です (ワンクリックで編集確定可能)。
 - Service Worker (PWA) は `https` か `localhost` で有効になります。
 - `今日` ボタンで当月・当日に即ジャンプできます。
