@@ -147,40 +147,29 @@
                   <input id="endTime" name="endTime" type="time" required />
                 </div>
               </div>
-              <p class="section-note">時刻欄をタップすると端末の時刻ピッカーを開けます。</p>
               <div class="field-row split">
                 <div>
                   <label for="breakMinutes">休憩(分)</label>
                   <input id="breakMinutes" name="breakMinutes" type="number" min="0" step="1" value="0" />
                 </div>
-                <div id="hourlyRateGroup">
-                  <label for="hourlyRate">時給(円) <span class="required-mark">*</span></label>
-                  <input id="hourlyRate" name="hourlyRate" type="number" min="0" step="1" required />
+                <div>
+                  <label for="shiftStatus">勤務ステータス</label>
+                  <select id="shiftStatus" name="shiftStatus">
+                    <option value="planned">予定</option>
+                    <option value="worked">勤務済み</option>
+                    <option value="paid">支払済み</option>
+                  </select>
                 </div>
               </div>
-              <div id="transportGroup" class="field-row">
-                <label for="transport">交通費(円)</label>
-                <input id="transport" name="transport" type="number" min="0" step="1" value="0" />
-              </div>
-              <div class="field-row">
-                <label for="shiftStatus">勤務ステータス</label>
-                <select id="shiftStatus" name="shiftStatus">
-                  <option value="planned">予定</option>
-                  <option value="worked">勤務済み</option>
-                  <option value="paid">支払済み</option>
-                </select>
-              </div>
+              <input id="hourlyRate" name="hourlyRate" type="hidden" />
+              <input id="transport" name="transport" type="hidden" />
               <div class="field-row">
                 <label for="memo">メモ</label>
                 <input id="memo" name="memo" type="text" placeholder="例: まかないあり" />
               </div>
-              <div class="field-row">
-                <label>
-                  <input id="timeeEnabled" name="timeeEnabled" type="checkbox" />
-                  タイミー案件として入力する
-                </label>
-              </div>
+              <input id="timeeEnabled" name="timeeEnabled" type="checkbox" hidden />
               <div id="timeeFields" class="sub-form compact-sub-form" hidden>
+                <h4 class="form-section-title">タイミー専用入力</h4>
                 <div class="field-row split">
                   <div>
                     <label for="timeeJobId">案件ID</label>
@@ -362,7 +351,7 @@
           <section class="panel settings-panel">
             <h3>給与設定</h3>
             <p class="section-note">日々の計算ルールを管理します。</p>
-            <form id="settingsForm">
+              <form id="settingsForm">
               <div class="field-row split">
                 <div>
                   <label for="defaultHourlyRate">デフォルト時給(円)</label>
@@ -400,16 +389,6 @@
                 </div>
                 <div class="field-row split">
                   <div>
-                    <label for="masterHourlyRate">既定時給(円)</label>
-                    <input id="masterHourlyRate" name="masterHourlyRate" type="number" min="0" step="1" required />
-                  </div>
-                  <div>
-                    <label for="masterTransport">既定交通費(円)</label>
-                    <input id="masterTransport" name="masterTransport" type="number" min="0" step="1" value="0" />
-                  </div>
-                </div>
-                <div class="field-row split">
-                  <div>
                     <label for="masterOvertimeThreshold">残業開始(時間/日)</label>
                     <input id="masterOvertimeThreshold" name="masterOvertimeThreshold" type="number" min="0" step="0.5" />
                   </div>
@@ -427,6 +406,31 @@
                   <button id="masterNew" type="button">新規</button>
                   <button id="masterDelete" type="button" class="danger">削除</button>
                 </div>
+                <details class="advanced-block">
+                  <summary>時給・交通費の期間管理</summary>
+                  <p class="section-note">「適用開始日」ごとに給与条件を保存します。日次入力では自動反映されます。</p>
+                  <input id="masterRateId" name="masterRateId" type="hidden" />
+                  <div class="field-row split">
+                    <div>
+                      <label for="masterRateEffectiveFrom">適用開始日</label>
+                      <input id="masterRateEffectiveFrom" name="masterRateEffectiveFrom" type="date" />
+                    </div>
+                    <div>
+                      <label for="masterRateHourlyRate">時給(円)</label>
+                      <input id="masterRateHourlyRate" name="masterRateHourlyRate" type="number" min="0" step="1" />
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <label for="masterRateTransport">交通費(円)</label>
+                    <input id="masterRateTransport" name="masterRateTransport" type="number" min="0" step="1" value="0" />
+                  </div>
+                  <div class="actions">
+                    <button id="masterRateSave" type="button">履歴を保存</button>
+                    <button id="masterRateNew" type="button">新規履歴</button>
+                    <button id="masterRateDelete" type="button" class="danger">履歴を削除</button>
+                  </div>
+                  <ul id="masterRateList" class="pattern-list"></ul>
+                </details>
                 <details class="advanced-block">
                   <summary>ライン・シフトパターン設定</summary>
                   <input id="patternId" name="patternId" type="hidden" />

@@ -36,6 +36,7 @@
   let selectedShiftId = null;
   let selectedMasterId = null;
   let selectedPatternId = null;
+  let selectedMasterRateId = null;
   let preferredWorkplaceMasterId = uiState.preferredWorkplaceMasterId || "";
   let summaryMasterFilter = normalizeSummaryMasterFilter(uiState.summaryMasterFilter);
   let bulkConfigState = normalizeBulkConfig(uiState.bulkConfig);
@@ -89,9 +90,7 @@
     endTime: document.getElementById("endTime"),
     breakMinutes: document.getElementById("breakMinutes"),
     hourlyRate: document.getElementById("hourlyRate"),
-    hourlyRateGroup: document.getElementById("hourlyRateGroup"),
     transport: document.getElementById("transport"),
-    transportGroup: document.getElementById("transportGroup"),
     shiftStatus: document.getElementById("shiftStatus"),
     memo: document.getElementById("memo"),
     timeeEnabled: document.getElementById("timeeEnabled"),
@@ -127,11 +126,17 @@
     masterForm: document.getElementById("masterForm"),
     masterId: document.getElementById("masterId"),
     masterName: document.getElementById("masterName"),
-    masterHourlyRate: document.getElementById("masterHourlyRate"),
-    masterTransport: document.getElementById("masterTransport"),
     masterOvertimeThreshold: document.getElementById("masterOvertimeThreshold"),
     masterOvertimeMultiplier: document.getElementById("masterOvertimeMultiplier"),
     masterTaxRate: document.getElementById("masterTaxRate"),
+    masterRateId: document.getElementById("masterRateId"),
+    masterRateEffectiveFrom: document.getElementById("masterRateEffectiveFrom"),
+    masterRateHourlyRate: document.getElementById("masterRateHourlyRate"),
+    masterRateTransport: document.getElementById("masterRateTransport"),
+    masterRateSave: document.getElementById("masterRateSave"),
+    masterRateNew: document.getElementById("masterRateNew"),
+    masterRateDelete: document.getElementById("masterRateDelete"),
+    masterRateList: document.getElementById("masterRateList"),
     patternId: document.getElementById("patternId"),
     patternLineName: document.getElementById("patternLineName"),
     patternName: document.getElementById("patternName"),
@@ -375,11 +380,18 @@
       if (!masterId) {
         preferredWorkplaceMasterId = "";
         selectedPatternId = null;
+        applyCompensationToFormFromSelection();
+        syncTimeeModeByWorkplace();
         renderShiftPatternControls();
         persistUiState();
         return;
       }
       applyMasterToShiftForm(masterId, { override: true, remember: true });
+      syncTimeeModeByWorkplace();
+    });
+
+    refs.workplace.addEventListener("input", () => {
+      syncTimeeModeByWorkplace();
     });
 
     refs.shiftLine.addEventListener("change", () => {
@@ -597,6 +609,7 @@
     refs.masterNew.addEventListener("click", () => {
       selectedMasterId = null;
       selectedPatternId = null;
+      selectedMasterRateId = null;
       renderMasterForm();
       renderMasterList();
       renderPatternForm();
@@ -605,6 +618,20 @@
 
     refs.masterDelete.addEventListener("click", () => {
       deleteSelectedMaster();
+    });
+
+    refs.masterRateSave.addEventListener("click", () => {
+      saveMasterRateFromForm();
+    });
+
+    refs.masterRateNew.addEventListener("click", () => {
+      selectedMasterRateId = null;
+      renderMasterRateForm();
+      renderMasterRateList();
+    });
+
+    refs.masterRateDelete.addEventListener("click", () => {
+      deleteSelectedMasterRate();
     });
 
     refs.patternSave.addEventListener("click", () => {
@@ -854,8 +881,6 @@
     refs.startTime.value = editing.startTime;
     refs.endTime.value = editing.endTime;
     refs.breakMinutes.value = editing.breakMinutes;
-    refs.hourlyRate.value = editing.hourlyRate;
-    refs.transport.value = editing.transport;
     refs.shiftStatus.value = normalizeShiftStatus(editing.shiftStatus);
     refs.memo.value = editing.memo || "";
     refs.timeeEnabled.checked = Boolean(editing.timeeEnabled);
@@ -866,6 +891,10 @@
     refs.workplaceMaster.value = matchedMasterId || "";
     refs.shiftLine.value = editing.lineName || "";
     refs.shiftPattern.value = editing.patternId || "";
+    applyCompensationToFormFromSelection(editing);
+    if (!editing.timeeEnabled) {
+      syncTimeeModeByWorkplace();
+    }
     renderShiftPatternControls();
     renderTimeeInputState();
 
@@ -952,23 +981,24 @@
     if (!selected) {
       refs.masterId.value = "";
       refs.masterName.value = "";
-      refs.masterHourlyRate.value = state.settings.defaultHourlyRate;
-      refs.masterTransport.value = 0;
       refs.masterOvertimeThreshold.value = state.settings.overtimeThreshold;
       refs.masterOvertimeMultiplier.value = state.settings.overtimeMultiplier;
       refs.masterTaxRate.value = state.settings.taxRate;
       refs.masterDelete.disabled = true;
+      selectedMasterRateId = null;
+      renderMasterRateForm();
+      renderMasterRateList();
       return;
     }
 
     refs.masterId.value = selected.id;
     refs.masterName.value = selected.name;
-    refs.masterHourlyRate.value = selected.defaultHourlyRate;
-    refs.masterTransport.value = selected.defaultTransport;
     refs.masterOvertimeThreshold.value = selected.overtimeThreshold;
     refs.masterOvertimeMultiplier.value = selected.overtimeMultiplier;
     refs.masterTaxRate.value = selected.taxRate;
     refs.masterDelete.disabled = false;
+    renderMasterRateForm();
+    renderMasterRateList();
   }
 
   function renderMasterList() {
@@ -995,13 +1025,16 @@
         escapeHtml(master.name) +
         '</div><div class="master-item-sub">' +
         escapeHtml(
-          `時給 ${formatCurrency(master.defaultHourlyRate)} / 交通費 ${formatCurrency(master.defaultTransport)} / 残業 ${master.overtimeThreshold}h x${master.overtimeMultiplier} / パターン ${getMasterPatterns(master).length}件`
+          `現在 時給 ${formatCurrency(master.defaultHourlyRate)} / 交通費 ${formatCurrency(master.defaultTransport)} / 履歴 ${getMasterPayRates(
+            master
+          ).length}件 / パターン ${getMasterPatterns(master).length}件`
         ) +
         "</div></div>";
 
       li.addEventListener("click", () => {
         if (selectedMasterId !== master.id) {
           selectedPatternId = null;
+          selectedMasterRateId = null;
         }
         selectedMasterId = master.id;
         renderMasterForm();
@@ -1011,6 +1044,89 @@
       });
 
       refs.masterList.appendChild(li);
+    }
+  }
+
+  function renderMasterRateForm() {
+    const master = getMasterById(selectedMasterId);
+    if (!master) {
+      refs.masterRateId.value = "";
+      refs.masterRateEffectiveFrom.value = toDateKey(new Date());
+      refs.masterRateHourlyRate.value = state.settings.defaultHourlyRate;
+      refs.masterRateTransport.value = 0;
+      refs.masterRateSave.disabled = true;
+      refs.masterRateNew.disabled = true;
+      refs.masterRateDelete.disabled = true;
+      return;
+    }
+
+    const rates = getMasterPayRates(master);
+    let target = rates.find((item) => item.id === selectedMasterRateId) || null;
+    if (!target) {
+      target = resolveMasterPayRateForDate(master, toDateKey(new Date()));
+      selectedMasterRateId = target ? target.id : null;
+    }
+
+    if (!target) {
+      refs.masterRateId.value = "";
+      refs.masterRateEffectiveFrom.value = toDateKey(new Date());
+      refs.masterRateHourlyRate.value = state.settings.defaultHourlyRate;
+      refs.masterRateTransport.value = 0;
+      refs.masterRateDelete.disabled = true;
+    } else {
+      refs.masterRateId.value = target.id;
+      refs.masterRateEffectiveFrom.value = target.effectiveFrom;
+      refs.masterRateHourlyRate.value = target.hourlyRate;
+      refs.masterRateTransport.value = target.transport;
+      refs.masterRateDelete.disabled = rates.length <= 1;
+    }
+
+    refs.masterRateSave.disabled = false;
+    refs.masterRateNew.disabled = false;
+  }
+
+  function renderMasterRateList() {
+    refs.masterRateList.innerHTML = "";
+    const master = getMasterById(selectedMasterId);
+    if (!master) {
+      const empty = document.createElement("li");
+      empty.className = "pattern-item";
+      empty.innerHTML = '<div class="pattern-item-sub">先に勤務先マスタを保存してください。</div>';
+      refs.masterRateList.appendChild(empty);
+      return;
+    }
+
+    const rates = getMasterPayRates(master);
+    if (rates.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "pattern-item";
+      empty.innerHTML = '<div class="pattern-item-sub">給与履歴はまだありません。</div>';
+      refs.masterRateList.appendChild(empty);
+      return;
+    }
+
+    for (let i = 0; i < rates.length; i += 1) {
+      const rate = rates[i];
+      const li = document.createElement("li");
+      li.className = "pattern-item";
+      if (rate.id === selectedMasterRateId) {
+        li.classList.add("active");
+      }
+      const rangeLabel = buildRateRangeLabel(rates, i);
+      li.innerHTML =
+        "<div><div>" +
+        escapeHtml(rangeLabel) +
+        '</div><div class="pattern-item-sub">' +
+        escapeHtml(`時給 ${formatCurrency(rate.hourlyRate)} / 交通費 ${formatCurrency(rate.transport)}`) +
+        "</div></div>";
+
+      li.addEventListener("click", () => {
+        selectedMasterRateId = rate.id;
+        renderMasterRateForm();
+        renderMasterRateList();
+      });
+
+      refs.masterRateList.appendChild(li);
     }
   }
 
@@ -1135,10 +1251,8 @@
     refs.timeeJobId.disabled = !enabled;
     refs.timeeFixedPay.disabled = !enabled;
     refs.timeeFixedPay.required = enabled;
-    refs.hourlyRate.disabled = enabled;
-    refs.transport.disabled = enabled;
-    refs.hourlyRateGroup.hidden = enabled;
-    refs.transportGroup.hidden = enabled;
+    refs.hourlyRate.disabled = true;
+    refs.transport.disabled = true;
   }
 
   function getMasterPatterns(master) {
@@ -1172,9 +1286,8 @@
     if (!refs.workplace.value.trim()) {
       refs.workplace.value = master.name;
     }
-    if (!refs.hourlyRate.value) {
-      refs.hourlyRate.value = master.defaultHourlyRate;
-    }
+    applyCompensationToFormFromSelection();
+    syncTimeeModeByWorkplace();
   }
 
   function savePatternFromForm() {
@@ -1292,9 +1405,10 @@
 
     const masters = sortMasters(state.masters);
     for (const master of masters) {
+      const currentRate = resolveMasterPayRateForDate(master, toDateKey(new Date()));
       const option = document.createElement("option");
       option.value = master.id;
-      option.textContent = `${master.name} (時給 ${Number(master.defaultHourlyRate).toLocaleString("ja-JP")}円)`;
+      option.textContent = `${master.name} (時給 ${Number(currentRate.hourlyRate).toLocaleString("ja-JP")}円)`;
       selectElement.appendChild(option);
     }
 
@@ -1551,8 +1665,6 @@
     refs.startTime.value = "";
     refs.endTime.value = "";
     refs.breakMinutes.value = 0;
-    refs.hourlyRate.value = state.settings.defaultHourlyRate;
-    refs.transport.value = 0;
     refs.shiftStatus.value = "planned";
     refs.memo.value = "";
     refs.timeeEnabled.checked = false;
@@ -1570,6 +1682,8 @@
     } else {
       refs.workplaceMaster.value = "";
     }
+    applyCompensationToFormFromSelection();
+    syncTimeeModeByWorkplace();
     renderShiftPatternControls();
     renderTimeeInputState();
 
@@ -1585,6 +1699,14 @@
       : null;
     const lineNameFromForm = refs.shiftLine.value.trim();
     const timeeEnabled = Boolean(refs.timeeEnabled.checked);
+    const paySnapshot = resolveCompensationForShift(
+      selectedDate || toDateKey(new Date()),
+      {
+        workplace: refs.workplace.value.trim(),
+        workplaceMasterId: selectedMaster ? selectedMaster.id : ""
+      },
+      selectedMaster
+    );
     const shift = {
       workplace: refs.workplace.value.trim(),
       workplaceMasterId: selectedMaster ? selectedMaster.id : "",
@@ -1594,8 +1716,8 @@
       startTime: refs.startTime.value.trim(),
       endTime: refs.endTime.value.trim(),
       breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
-      hourlyRate: toNonNegativeNumber(refs.hourlyRate.value, state.settings.defaultHourlyRate),
-      transport: toNonNegativeNumber(refs.transport.value, 0),
+      hourlyRate: paySnapshot.hourlyRate,
+      transport: paySnapshot.transport,
       shiftStatus: normalizeShiftStatus(refs.shiftStatus.value),
       memo: refs.memo.value.trim(),
       timeeEnabled,
@@ -1630,10 +1752,6 @@
       throw new Error("タイミー案件では総支給額(円)を入力してください。");
     }
 
-    if (!shift.timeeEnabled && shift.hourlyRate <= 0) {
-      throw new Error("時給を入力してください。");
-    }
-
     return shift;
   }
 
@@ -1654,17 +1772,9 @@
 
     if (override) {
       refs.workplace.value = master.name;
-      refs.hourlyRate.value = master.defaultHourlyRate;
-      refs.transport.value = master.defaultTransport;
     } else {
       if (!refs.workplace.value.trim()) {
         refs.workplace.value = master.name;
-      }
-      if (!refs.hourlyRate.value) {
-        refs.hourlyRate.value = master.defaultHourlyRate;
-      }
-      if (!refs.transport.value) {
-        refs.transport.value = master.defaultTransport;
       }
     }
 
@@ -1673,6 +1783,8 @@
       persistUiState();
     }
 
+    applyCompensationToFormFromSelection();
+    syncTimeeModeByWorkplace();
     renderShiftPatternControls();
     return true;
   }
@@ -1685,21 +1797,22 @@
 
     const override = !options || options.override !== false;
     const remember = !options || options.remember !== false;
+    const todayRate = resolveMasterPayRateForDate(master, toDateKey(new Date()));
     refs.bulkWorkplaceMaster.value = master.id;
 
     if (override) {
       refs.bulkWorkplace.value = master.name;
-      refs.bulkHourlyRate.value = master.defaultHourlyRate;
-      refs.bulkTransport.value = master.defaultTransport;
+      refs.bulkHourlyRate.value = todayRate.hourlyRate;
+      refs.bulkTransport.value = todayRate.transport;
     } else {
       if (!refs.bulkWorkplace.value.trim()) {
         refs.bulkWorkplace.value = master.name;
       }
       if (!refs.bulkHourlyRate.value) {
-        refs.bulkHourlyRate.value = master.defaultHourlyRate;
+        refs.bulkHourlyRate.value = todayRate.hourlyRate;
       }
       if (!refs.bulkTransport.value) {
-        refs.bulkTransport.value = master.defaultTransport;
+        refs.bulkTransport.value = todayRate.transport;
       }
     }
 
@@ -1850,6 +1963,9 @@
 
   function getDefaultBulkConfig() {
     const preferredMaster = getMasterById(preferredWorkplaceMasterId);
+    const preferredRate = preferredMaster
+      ? resolveMasterPayRateForDate(preferredMaster, toDateKey(new Date()))
+      : null;
     const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
     const lastDay = endOfMonth(currentMonth);
 
@@ -1859,8 +1975,8 @@
       startTime: "",
       endTime: "",
       breakMinutes: 0,
-      hourlyRate: preferredMaster ? preferredMaster.defaultHourlyRate : state.settings.defaultHourlyRate,
-      transport: preferredMaster ? preferredMaster.defaultTransport : 0,
+      hourlyRate: preferredRate ? preferredRate.hourlyRate : state.settings.defaultHourlyRate,
+      transport: preferredRate ? preferredRate.transport : 0,
       startDate: toDateKey(firstDay),
       endDate: toDateKey(lastDay),
       weekdays: [1, 3, 5],
@@ -1932,25 +2048,38 @@
       alert("勤務先を入力してから保存してください。");
       return;
     }
-
-    const defaultHourlyRate = toPositiveNumber(refs.hourlyRate.value, state.settings.defaultHourlyRate);
-    const defaultTransport = toNonNegativeNumber(refs.transport.value, 0);
+    const effectiveDate = selectedDate || toDateKey(new Date());
+    const compensation = resolveCompensationForShift(effectiveDate, {
+      workplace: name,
+      workplaceMasterId: refs.workplaceMaster.value || ""
+    });
 
     const existing = findMasterByName(name);
     const masterId = existing ? existing.id : createMasterId();
+    const baseRates = existing ? getMasterPayRates(existing) : [];
+    if (baseRates.length === 0) {
+      baseRates.push({
+        id: createMasterRateId(),
+        effectiveFrom: effectiveDate,
+        hourlyRate: compensation.hourlyRate,
+        transport: compensation.transport
+      });
+    }
     const master = {
       id: masterId,
       name,
-      defaultHourlyRate,
-      defaultTransport,
+      defaultHourlyRate: compensation.hourlyRate,
+      defaultTransport: compensation.transport,
       overtimeThreshold: existing ? existing.overtimeThreshold : state.settings.overtimeThreshold,
       overtimeMultiplier: existing ? existing.overtimeMultiplier : state.settings.overtimeMultiplier,
       taxRate: existing ? existing.taxRate : state.settings.taxRate,
+      payRates: baseRates,
       patterns: existing ? getMasterPatterns(existing) : []
     };
 
     state.masters = upsertMaster(state.masters, master);
     selectedMasterId = master.id;
+    selectedMasterRateId = resolveMasterPayRateForDate(master, effectiveDate)?.id || null;
 
     persistState();
     renderMasterForm();
@@ -1972,8 +2101,6 @@
   function saveMasterFromForm() {
     const idFromForm = refs.masterId.value.trim();
     const name = refs.masterName.value.trim();
-    const defaultHourlyRate = toPositiveNumber(refs.masterHourlyRate.value, state.settings.defaultHourlyRate);
-    const defaultTransport = toNonNegativeNumber(refs.masterTransport.value, 0);
     const overtimeThreshold = toNonNegativeNumber(refs.masterOvertimeThreshold.value, state.settings.overtimeThreshold);
     const overtimeMultiplier = Math.max(1, toPositiveNumber(refs.masterOvertimeMultiplier.value, state.settings.overtimeMultiplier));
     const taxRate = clamp(toNonNegativeNumber(refs.masterTaxRate.value, state.settings.taxRate), 0, 100);
@@ -1987,20 +2114,34 @@
     const existingByName = findMasterByName(name);
     const inheritedSource = existingById || existingByName;
     const targetId = idFromForm || (existingByName ? existingByName.id : createMasterId());
+    const inheritedRates = inheritedSource ? getMasterPayRates(inheritedSource) : [];
+    const rates = inheritedRates.length
+      ? inheritedRates
+      : [
+          {
+            id: createMasterRateId(),
+            effectiveFrom: toDateKey(new Date()),
+            hourlyRate: state.settings.defaultHourlyRate,
+            transport: 0
+          }
+        ];
+    const currentRate = resolvePayRateForDate(rates, toDateKey(new Date()));
 
     const master = {
       id: targetId,
       name,
-      defaultHourlyRate,
-      defaultTransport,
+      defaultHourlyRate: currentRate.hourlyRate,
+      defaultTransport: currentRate.transport,
       overtimeThreshold,
       overtimeMultiplier,
       taxRate,
+      payRates: rates,
       patterns: inheritedSource ? getMasterPatterns(inheritedSource) : []
     };
 
     state.masters = upsertMaster(state.masters, master);
     selectedMasterId = targetId;
+    selectedMasterRateId = resolveMasterPayRateForDate(master, toDateKey(new Date()))?.id || null;
 
     persistState();
     renderMasterForm();
@@ -2015,6 +2156,110 @@
 
     queueAutoSync("勤務先マスタ保存");
     alert("勤務先マスタを保存しました。");
+  }
+
+  function saveMasterRateFromForm() {
+    const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
+    if (!master) {
+      alert("先に勤務先マスタを保存してください。");
+      return;
+    }
+
+    const idFromForm = refs.masterRateId.value.trim();
+    const effectiveFrom = refs.masterRateEffectiveFrom.value;
+    const hourlyRate = toPositiveNumber(refs.masterRateHourlyRate.value, 0);
+    const transport = toNonNegativeNumber(refs.masterRateTransport.value, 0);
+
+    if (!isValidDateKey(effectiveFrom)) {
+      alert("適用開始日を入力してください。");
+      return;
+    }
+    if (hourlyRate <= 0) {
+      alert("時給を入力してください。");
+      return;
+    }
+
+    const nextRates = upsertMasterPayRate(
+      getMasterPayRates(master),
+      {
+        id: idFromForm || createMasterRateId(),
+        effectiveFrom,
+        hourlyRate,
+        transport
+      }
+    );
+    const currentRate = resolvePayRateForDate(nextRates, toDateKey(new Date()));
+    const nextMaster = {
+      ...master,
+      defaultHourlyRate: currentRate.hourlyRate,
+      defaultTransport: currentRate.transport,
+      payRates: nextRates
+    };
+
+    state.masters = upsertMaster(state.masters, nextMaster);
+    selectedMasterId = nextMaster.id;
+    selectedMasterRateId = nextRates.find((item) => item.effectiveFrom === effectiveFrom)?.id || idFromForm || null;
+
+    persistState();
+    renderMasterForm();
+    renderMasterList();
+    renderWorkplaceMasterOptions();
+    renderShiftForm();
+    renderDayShiftList();
+    renderSummary();
+    renderBulkForm();
+    queueAutoSync("給与履歴保存");
+    alert("給与履歴を保存しました。");
+  }
+
+  function deleteSelectedMasterRate() {
+    const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
+    if (!master) {
+      return;
+    }
+
+    const rateId = refs.masterRateId.value.trim() || selectedMasterRateId;
+    if (!rateId) {
+      return;
+    }
+
+    const rates = getMasterPayRates(master);
+    if (rates.length <= 1) {
+      alert("給与履歴は最低1件必要です。");
+      return;
+    }
+
+    const target = rates.find((item) => item.id === rateId);
+    if (!target) {
+      return;
+    }
+
+    if (!window.confirm(`適用開始日 ${target.effectiveFrom} の履歴を削除しますか？`)) {
+      return;
+    }
+
+    const nextRates = rates.filter((item) => item.id !== rateId);
+    const currentRate = resolvePayRateForDate(nextRates, toDateKey(new Date()));
+    const nextMaster = {
+      ...master,
+      defaultHourlyRate: currentRate.hourlyRate,
+      defaultTransport: currentRate.transport,
+      payRates: nextRates
+    };
+
+    state.masters = upsertMaster(state.masters, nextMaster);
+    selectedMasterId = nextMaster.id;
+    selectedMasterRateId = resolveMasterPayRateForDate(nextMaster, toDateKey(new Date()))?.id || nextRates[0].id;
+
+    persistState();
+    renderMasterForm();
+    renderMasterList();
+    renderWorkplaceMasterOptions();
+    renderShiftForm();
+    renderDayShiftList();
+    renderSummary();
+    renderBulkForm();
+    queueAutoSync("給与履歴削除");
   }
 
   function deleteSelectedMaster() {
@@ -2045,6 +2290,7 @@
 
     selectedMasterId = null;
     selectedPatternId = null;
+    selectedMasterRateId = null;
     persistState();
     renderMasterForm();
     renderMasterList();
@@ -2089,6 +2335,7 @@
     const range = resolveShiftRange(dateKey, shift.startTime, shift.endTime);
     const totalMinutes = Math.max(0, Math.round((range.end - range.start) / 60000));
     const workedMinutes = Math.max(0, totalMinutes - shift.breakMinutes);
+    const compensation = resolveCompensationForShift(dateKey, shift);
 
     const policy = resolvePayPolicyForShift(shift);
     const overtimeStart = policy.overtimeThreshold * 60;
@@ -2099,9 +2346,9 @@
     if (shift.timeeEnabled && shift.timeeFixedPay > 0) {
       gross = Math.round(shift.timeeFixedPay);
     } else {
-      const regularPay = (regularMinutes / 60) * shift.hourlyRate;
-      const overtimePay = (overtimeMinutes / 60) * shift.hourlyRate * policy.overtimeMultiplier;
-      gross = Math.round(regularPay + overtimePay + shift.transport);
+      const regularPay = (regularMinutes / 60) * compensation.hourlyRate;
+      const overtimePay = (overtimeMinutes / 60) * compensation.hourlyRate * policy.overtimeMultiplier;
+      gross = Math.round(regularPay + overtimePay + compensation.transport);
     }
     const net = Math.round(gross * (1 - policy.taxRate / 100));
 
@@ -2109,6 +2356,8 @@
       workedMinutes,
       regularMinutes,
       overtimeMinutes,
+      hourlyRate: compensation.hourlyRate,
+      transport: compensation.transport,
       gross,
       net
     };
@@ -2146,6 +2395,7 @@
 
   function openGoogleCalendarEvent(dateKey, shift, allowReturnWindow) {
     const range = resolveShiftRange(dateKey, shift.startTime, shift.endTime);
+    const result = calcShiftPay(dateKey, shift);
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo";
     const url = new URL("https://calendar.google.com/calendar/render");
 
@@ -2156,7 +2406,7 @@
       "details",
       `勤務: ${shift.startTime}-${shift.endTime}\n状態: ${getShiftStatusLabel(
         normalizeShiftStatus(shift.shiftStatus)
-      )}\n休憩: ${shift.breakMinutes}分\n時給: ${shift.hourlyRate}円${
+      )}\n休憩: ${shift.breakMinutes}分\n時給: ${result.hourlyRate}円\n交通費: ${result.transport}円${
         shift.timeeEnabled ? `\nタイミー案件ID: ${shift.timeeJobId || "-"}` : ""
       }${
         shift.timeeEnabled && shift.timeeFixedPay > 0 ? `\nタイミー総支給額: ${shift.timeeFixedPay}円` : ""
@@ -2330,14 +2580,17 @@
       const key = normalizeNameKey(master.name);
       if (byName.has(key)) {
         const existing = byName.get(key);
+        const mergedRates = mergePayRates(getMasterPayRates(existing), getMasterPayRates(master));
+        const currentRate = resolvePayRateForDate(mergedRates, toDateKey(new Date()));
         byName.set(key, {
           ...existing,
           name: master.name,
-          defaultHourlyRate: master.defaultHourlyRate,
-          defaultTransport: master.defaultTransport,
+          defaultHourlyRate: currentRate.hourlyRate,
+          defaultTransport: currentRate.transport,
           overtimeThreshold: master.overtimeThreshold,
           overtimeMultiplier: master.overtimeMultiplier,
           taxRate: master.taxRate,
+          payRates: mergedRates,
           patterns: mergePatternLists(existing.patterns, master.patterns)
         });
       } else {
@@ -2350,7 +2603,7 @@
 
   function buildSyncPayload() {
     return {
-      version: 5,
+      version: 6,
       updatedAt: new Date().toISOString(),
       data: {
         shifts: state.shifts,
@@ -2608,8 +2861,8 @@
         row.shift.startTime,
         row.shift.endTime,
         row.shift.breakMinutes,
-        row.shift.hourlyRate,
-        row.shift.transport,
+        row.result.hourlyRate,
+        row.result.transport,
         row.shift.timeeEnabled ? "はい" : "いいえ",
         row.shift.timeeJobId || "",
         row.shift.timeeFixedPay || 0,
@@ -2828,17 +3081,77 @@
     }
 
     const id = typeof raw.id === "string" && raw.id.trim() ? raw.id : `${createMasterId()}_${index}`;
+    const normalizedRates = normalizePayRates(
+      raw.payRates || raw.payHistory || raw.wageHistory,
+      toPositiveNumber(raw.defaultHourlyRate, defaultState.settings.defaultHourlyRate),
+      toNonNegativeNumber(raw.defaultTransport, 0)
+    );
+    const todayRate = resolvePayRateForDate(normalizedRates, toDateKey(new Date()));
 
     return {
       id,
       name,
-      defaultHourlyRate: toPositiveNumber(raw.defaultHourlyRate, defaultState.settings.defaultHourlyRate),
-      defaultTransport: toNonNegativeNumber(raw.defaultTransport, 0),
+      defaultHourlyRate: todayRate.hourlyRate,
+      defaultTransport: todayRate.transport,
       overtimeThreshold: toNonNegativeNumber(raw.overtimeThreshold, defaultState.settings.overtimeThreshold),
       overtimeMultiplier: Math.max(1, toPositiveNumber(raw.overtimeMultiplier, defaultState.settings.overtimeMultiplier)),
       taxRate: clamp(toNonNegativeNumber(raw.taxRate, defaultState.settings.taxRate), 0, 100),
+      payRates: normalizedRates,
       patterns: normalizePatternList(raw.patterns)
     };
+  }
+
+  function normalizePayRates(rawRates, fallbackHourlyRate, fallbackTransport) {
+    const list = [];
+    let candidates = [];
+    if (Array.isArray(rawRates)) {
+      candidates = rawRates;
+    } else if (isObject(rawRates)) {
+      candidates = Object.values(rawRates);
+    }
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const raw = candidates[i];
+      if (!isObject(raw)) {
+        continue;
+      }
+      const effectiveFrom = typeof raw.effectiveFrom === "string" ? raw.effectiveFrom : raw.startDate;
+      if (!isValidDateKey(effectiveFrom)) {
+        continue;
+      }
+      const hourlyRate = toPositiveNumber(raw.hourlyRate, 0);
+      if (hourlyRate <= 0) {
+        continue;
+      }
+      list.push({
+        id: typeof raw.id === "string" && raw.id.trim() ? raw.id : createMasterRateId(),
+        effectiveFrom,
+        hourlyRate,
+        transport: toNonNegativeNumber(raw.transport, 0)
+      });
+    }
+
+    if (list.length === 0) {
+      list.push({
+        id: createMasterRateId(),
+        effectiveFrom: "1970-01-01",
+        hourlyRate: toPositiveNumber(fallbackHourlyRate, defaultState.settings.defaultHourlyRate),
+        transport: toNonNegativeNumber(fallbackTransport, 0)
+      });
+    }
+
+    const byDate = new Map();
+    for (const item of list) {
+      byDate.set(item.effectiveFrom, item);
+    }
+
+    return Array.from(byDate.values()).sort((a, b) => {
+      const dateDiff = a.effectiveFrom.localeCompare(b.effectiveFrom);
+      if (dateDiff !== 0) {
+        return dateDiff;
+      }
+      return a.id.localeCompare(b.id);
+    });
   }
 
   function normalizePatternList(rawPatterns) {
@@ -2930,6 +3243,14 @@
     return sortPatterns(Array.from(merged.values()));
   }
 
+  function mergePayRates(localRates, remoteRates) {
+    return normalizePayRates(
+      [...normalizePayRates(localRates, state.settings.defaultHourlyRate, 0), ...normalizePayRates(remoteRates, state.settings.defaultHourlyRate, 0)],
+      state.settings.defaultHourlyRate,
+      0
+    );
+  }
+
   function sortMasters(masters) {
     return [...masters].sort((a, b) => a.name.localeCompare(b.name, "ja"));
   }
@@ -2990,6 +3311,123 @@
     }
 
     return "";
+  }
+
+  function getMasterPayRates(master) {
+    if (!master) {
+      return [];
+    }
+    return normalizePayRates(master.payRates, master.defaultHourlyRate, master.defaultTransport);
+  }
+
+  function resolvePayRateForDate(rates, dateKey) {
+    const list = Array.isArray(rates) ? rates : [];
+    if (list.length === 0) {
+      return {
+        id: "",
+        effectiveFrom: "1970-01-01",
+        hourlyRate: state.settings.defaultHourlyRate,
+        transport: 0
+      };
+    }
+
+    const targetDate = isValidDateKey(dateKey) ? dateKey : toDateKey(new Date());
+    let selected = list[0];
+    for (const rate of list) {
+      if (rate.effectiveFrom <= targetDate) {
+        selected = rate;
+      } else {
+        break;
+      }
+    }
+    return selected;
+  }
+
+  function resolveMasterPayRateForDate(master, dateKey) {
+    return resolvePayRateForDate(getMasterPayRates(master), dateKey);
+  }
+
+  function resolveCompensationForShift(dateKey, shift, preResolvedMaster) {
+    const master = preResolvedMaster || getMasterById(shift.workplaceMasterId) || findMasterByName(shift.workplace);
+    if (master) {
+      const payRate = resolveMasterPayRateForDate(master, dateKey);
+      return {
+        hourlyRate: payRate.hourlyRate,
+        transport: payRate.transport
+      };
+    }
+    return {
+      hourlyRate: toPositiveNumber(shift.hourlyRate, state.settings.defaultHourlyRate),
+      transport: toNonNegativeNumber(shift.transport, 0)
+    };
+  }
+
+  function applyCompensationToFormFromSelection(editingShift) {
+    const dateKey = selectedDate || toDateKey(new Date());
+    const selectedMaster = getMasterById(refs.workplaceMaster.value);
+    const sourceShift = editingShift || {
+      workplace: refs.workplace.value.trim(),
+      workplaceMasterId: selectedMaster ? selectedMaster.id : ""
+    };
+    const compensation = resolveCompensationForShift(dateKey, sourceShift, selectedMaster);
+    refs.hourlyRate.value = compensation.hourlyRate;
+    refs.transport.value = compensation.transport;
+    return compensation;
+  }
+
+  function isTimeeWorkplaceName(text) {
+    const normalized = normalizeNameKey(text);
+    if (!normalized) {
+      return false;
+    }
+    return normalized.includes("タイミー") || normalized.includes("timee");
+  }
+
+  function syncTimeeModeByWorkplace() {
+    const master = getMasterById(refs.workplaceMaster.value);
+    const fromMaster = master ? master.name : "";
+    const fromInput = refs.workplace.value;
+    const enabled = isTimeeWorkplaceName(fromMaster) || isTimeeWorkplaceName(fromInput);
+    refs.timeeEnabled.checked = enabled;
+    if (!enabled) {
+      refs.timeeJobId.value = "";
+      refs.timeeFixedPay.value = "";
+    }
+    renderTimeeInputState();
+  }
+
+  function buildRateRangeLabel(rates, index) {
+    const current = rates[index];
+    if (!current) {
+      return "";
+    }
+    const next = rates[index + 1];
+    if (!next) {
+      return `${current.effectiveFrom} 〜`;
+    }
+    const endDate = addDaysToDateKey(next.effectiveFrom, -1);
+    return `${current.effectiveFrom} 〜 ${endDate}`;
+  }
+
+  function addDaysToDateKey(dateKey, offsetDays) {
+    const parsed = parseDateInput(dateKey);
+    if (!parsed) {
+      return dateKey;
+    }
+    parsed.setDate(parsed.getDate() + offsetDays);
+    return toDateKey(parsed);
+  }
+
+  function upsertMasterPayRate(rates, targetRate) {
+    const normalized = normalizePayRates(
+      [
+        ...rates.filter((item) => item.id !== targetRate.id && item.effectiveFrom !== targetRate.effectiveFrom),
+        targetRate
+      ],
+      state.settings.defaultHourlyRate,
+      0
+    );
+    return normalized;
   }
 
   function normalizeShiftStatus(value) {
@@ -3096,6 +3534,10 @@
 
   function createMasterId() {
     return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function createMasterRateId() {
+    return `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   }
 
   function createPatternId() {
