@@ -20,8 +20,8 @@
         <p id="authDescription" class="section-note">利用前に認証してください。</p>
         <form id="authForm">
           <div class="field-row">
-            <label for="authUserId">ユーザーID</label>
-            <input id="authUserId" name="authUserId" type="text" autocomplete="username" required />
+            <label for="authUserId">メールアドレス</label>
+            <input id="authUserId" name="authUserId" type="email" autocomplete="username" required />
           </div>
           <div class="field-row">
             <label for="authPassword">パスワード</label>
@@ -43,40 +43,6 @@
             <button id="authToggleMode" type="button">新規登録に切替</button>
           </div>
         </form>
-        <details class="advanced-block">
-          <summary>ログイン情報を別ブラウザへ移行</summary>
-          <p class="section-note">登録済み端末で復元コードを生成し、新しい端末で適用してください。</p>
-          <div class="field-row">
-            <label for="authTransferCode">認証復元コード</label>
-            <textarea id="authTransferCode" name="authTransferCode" rows="3" placeholder="ここに復元コードを貼り付け"></textarea>
-          </div>
-          <div class="actions">
-            <button id="generateAuthTransfer" type="button">復元コード生成</button>
-            <button id="applyAuthTransfer" type="button">復元コード適用</button>
-          </div>
-          <p class="section-note">他人に共有しないでください。</p>
-        </details>
-        <details class="advanced-block">
-          <summary>クラウドからログイン情報を復元</summary>
-          <p class="section-note">復元コードを使わず、同期用Gistからログイン情報を復元します。</p>
-          <div class="field-row">
-            <label for="authCloudToken">GitHub Personal Access Token</label>
-            <input id="authCloudToken" name="authCloudToken" type="password" autocomplete="off" />
-          </div>
-          <div class="field-row split">
-            <div>
-              <label for="authCloudGistId">Gist ID</label>
-              <input id="authCloudGistId" name="authCloudGistId" type="text" autocomplete="off" />
-            </div>
-            <div>
-              <label for="authCloudFilename">ファイル名</label>
-              <input id="authCloudFilename" name="authCloudFilename" type="text" value="shifm-data.json" />
-            </div>
-          </div>
-          <div class="actions">
-            <button id="authCloudRestore" type="button">クラウドから復元</button>
-          </div>
-        </details>
       </div>
     </section>
 
@@ -577,6 +543,7 @@
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./app.js"></script>
   </body>
 </html>

@@ -4,7 +4,9 @@
   const STORAGE_KEY = "shifm_store_v3";
   const UI_VIEW_KEY = "shifm_ui_view_v1";
   const UI_STATE_KEY = "shifm_ui_state_v1";
-  const AUTH_PROFILE_KEY = "shifm_auth_profile_v1";
+  const SUPABASE_URL = "https://vnmccbcjcaesavgymrzd.supabase.co";
+  const SUPABASE_ANON_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZubWNjYmNqY2Flc2F2Z3ltcnpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2NzUwMTAsImV4cCI6MjA4NzI1MTAxMH0.a3fhvtRGv_Mccb7N8T4T5n0RLFJ8mhpO2iae1zuzQw4";
   const LEGACY_STORAGE_KEYS = ["shifm_store_v2", "shifm_store_v1"];
   const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
   const VIEW_NAMES = ["shift", "summary", "settings", "sync"];
@@ -42,9 +44,9 @@
   let bulkConfigState = normalizeBulkConfig(uiState.bulkConfig);
   let activeView = loadActiveView();
   let autoSyncTimer = null;
-  let authProfile = loadAuthProfile();
-  let authMode = authProfile ? "login" : "register";
+  let authMode = "login";
   let authenticatedUserId = "";
+  let supabaseClient = null;
 
   const refs = {
     appMain: document.getElementById("appMain"),
@@ -59,13 +61,6 @@
     authStatus: document.getElementById("authStatus"),
     authSubmit: document.getElementById("authSubmit"),
     authToggleMode: document.getElementById("authToggleMode"),
-    authTransferCode: document.getElementById("authTransferCode"),
-    generateAuthTransfer: document.getElementById("generateAuthTransfer"),
-    applyAuthTransfer: document.getElementById("applyAuthTransfer"),
-    authCloudToken: document.getElementById("authCloudToken"),
-    authCloudGistId: document.getElementById("authCloudGistId"),
-    authCloudFilename: document.getElementById("authCloudFilename"),
-    authCloudRestore: document.getElementById("authCloudRestore"),
     currentUserLabel: document.getElementById("currentUserLabel"),
     logoutButton: document.getElementById("logoutButton"),
     viewTabs: Array.from(document.querySelectorAll(".view-tab")),
@@ -193,11 +188,46 @@
   });
 
   async function init() {
+    initSupabase();
     bindAuthEvents();
     renderAuthView();
     updateCurrentUserLabel();
     bindEvents();
     registerServiceWorker();
+    await restoreSupabaseSession();
+  }
+
+  function initSupabase() {
+    if (!window.supabase || typeof window.supabase.createClient !== "function") {
+      throw new Error("Supabase SDKの読み込みに失敗しました。");
+    }
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      if (session && session.user) {
+        authenticatedUserId = session.user.email || session.user.id;
+        unlockApp();
+        return;
+      }
+      authenticatedUserId = "";
+      lockApp({ clearStatus: false });
+    });
+  }
+
+  async function restoreSupabaseSession() {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) {
+      setAuthStatus(`認証状態の取得に失敗しました: ${error.message}`);
+      lockApp({ clearStatus: false });
+      return;
+    }
+    const session = data && data.session;
+    if (session && session.user) {
+      authenticatedUserId = session.user.email || session.user.id;
+      unlockApp();
+      return;
+    }
+    authenticatedUserId = "";
+    lockApp({ clearStatus: false });
   }
 
   function bindAuthEvents() {
@@ -211,27 +241,19 @@
       setAuthStatus("");
       renderAuthView();
     });
-
-    refs.generateAuthTransfer.addEventListener("click", async () => {
-      await generateAuthTransferCode();
-    });
-
-    refs.applyAuthTransfer.addEventListener("click", () => {
-      applyAuthTransferCode();
-    });
-
-    refs.authCloudRestore.addEventListener("click", async () => {
-      await restoreAuthFromCloud();
-    });
   }
 
   async function submitAuth() {
-    const userId = refs.authUserId.value.trim();
+    const email = refs.authUserId.value.trim().toLowerCase();
     const password = refs.authPassword.value;
     const passwordConfirm = refs.authPasswordConfirm.value;
 
-    if (!userId) {
-      setAuthStatus("ユーザーIDを入力してください。");
+    if (!email) {
+      setAuthStatus("メールアドレスを入力してください。");
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setAuthStatus("メールアドレス形式で入力してください。");
       return;
     }
     if (!password || password.length < 6) {
@@ -244,45 +266,38 @@
         setAuthStatus("パスワード確認が一致しません。");
         return;
       }
-      if (authProfile && !window.confirm("既存ログイン情報を上書きしますか？")) {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password
+      });
+      if (error) {
+        setAuthStatus(error.message);
         return;
       }
-
-      const salt = createSalt();
-      const passwordHash = await hashPassword(userId, password, salt);
-      authProfile = {
-        version: 1,
-        userId,
-        salt,
-        passwordHash,
-        updatedAt: new Date().toISOString()
-      };
-      persistAuthProfile(authProfile);
-      authMode = "login";
-      setAuthStatus("登録しました。続けてログインしてください。");
       refs.authPassword.value = "";
       refs.authPasswordConfirm.value = "";
+      if (data && data.session && data.user) {
+        authenticatedUserId = data.user.email || data.user.id;
+        setAuthStatus("");
+        unlockApp();
+        return;
+      }
+      authMode = "login";
       renderAuthView();
+      setAuthStatus("登録しました。確認メールが届いた場合は認証後にログインしてください。");
       return;
     }
 
-    if (!authProfile) {
-      setAuthStatus("このブラウザには登録情報がありません。新規登録するか、認証復元コードを適用してください。");
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
+    if (error) {
+      setAuthStatus(error.message);
       return;
     }
 
-    if (userId !== authProfile.userId) {
-      setAuthStatus("ユーザーIDが一致しません。");
-      return;
-    }
-
-    const attemptedHash = await hashPassword(userId, password, authProfile.salt);
-    if (attemptedHash !== authProfile.passwordHash) {
-      setAuthStatus("パスワードが違います。");
-      return;
-    }
-
-    authenticatedUserId = userId;
+    authenticatedUserId = data && data.user ? data.user.email || data.user.id : email;
     refs.authPassword.value = "";
     refs.authPasswordConfirm.value = "";
     setAuthStatus("");
@@ -293,151 +308,12 @@
     const isLogin = authMode === "login";
     refs.authTitle.textContent = isLogin ? "ログイン" : "新規登録";
     refs.authDescription.textContent = isLogin
-      ? "登録済みユーザーで認証してください。"
-      : "最初にユーザーIDとパスワードを登録します。";
+      ? "登録済みメールアドレスで認証してください。"
+      : "最初にメールアドレスとパスワードを登録します。";
     refs.authSubmit.textContent = isLogin ? "ログイン" : "登録";
     refs.authToggleMode.textContent = isLogin ? "新規登録に切替" : "ログインに切替";
     refs.authConfirmRow.hidden = isLogin;
     refs.authPasswordConfirm.required = !isLogin;
-
-    if (authProfile && authProfile.userId && isLogin) {
-      refs.authUserId.value = authProfile.userId;
-    }
-    if (!refs.authCloudToken.value && state.sync.githubToken) {
-      refs.authCloudToken.value = state.sync.githubToken;
-    }
-    if (!refs.authCloudGistId.value && state.sync.gistId) {
-      refs.authCloudGistId.value = state.sync.gistId;
-    }
-    if (!refs.authCloudFilename.value) {
-      refs.authCloudFilename.value = state.sync.gistFilename || "shifm-data.json";
-    }
-  }
-
-  async function generateAuthTransferCode() {
-    if (!authProfile) {
-      setAuthStatus("先に新規登録またはログインを完了してください。");
-      return;
-    }
-
-    const payload = {
-      version: 1,
-      kind: "auth_transfer",
-      updatedAt: new Date().toISOString(),
-      profile: authProfile
-    };
-    const code = encodeBase64Url(JSON.stringify(payload));
-    refs.authTransferCode.value = code;
-
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(code);
-        setAuthStatus("認証復元コードを生成し、クリップボードにコピーしました。");
-      } else {
-        setAuthStatus("認証復元コードを生成しました。");
-      }
-    } catch (error) {
-      setAuthStatus("認証復元コードを生成しました。");
-    }
-  }
-
-  function applyAuthTransferCode() {
-    const rawCode = refs.authTransferCode.value.trim();
-    if (!rawCode) {
-      alert("認証復元コードを貼り付けてください。");
-      return;
-    }
-
-    try {
-      const decoded = decodeBase64Url(rawCode);
-      const parsed = JSON.parse(decoded);
-      const profile = normalizeAuthProfileObject(
-        isObject(parsed) && isObject(parsed.profile) ? parsed.profile : parsed
-      );
-      if (!profile) {
-        throw new Error("認証復元コードが不正です。");
-      }
-
-      if (
-        authProfile &&
-        (authProfile.userId !== profile.userId || authProfile.passwordHash !== profile.passwordHash) &&
-        !window.confirm("既存のログイン情報を上書きしますか？")
-      ) {
-        return;
-      }
-
-      authProfile = profile;
-      persistAuthProfile(authProfile);
-      authMode = "login";
-      authenticatedUserId = "";
-      refs.authUserId.value = authProfile.userId;
-      refs.authPassword.value = "";
-      refs.authPasswordConfirm.value = "";
-      renderAuthView();
-      setAuthStatus("認証情報を復元しました。ログインしてください。");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "認証復元コードの適用に失敗しました。";
-      alert(message);
-      setAuthStatus(message);
-    }
-  }
-
-  async function restoreAuthFromCloud() {
-    const githubToken = refs.authCloudToken.value.trim();
-    const gistId = refs.authCloudGistId.value.trim();
-    const gistFilename = refs.authCloudFilename.value.trim() || "shifm-data.json";
-
-    if (!githubToken || !gistId) {
-      setAuthStatus("Token と Gist ID を入力してください。");
-      return;
-    }
-
-    try {
-      setAuthStatus("クラウドから認証情報を取得中...");
-      const response = await fetch(`https://api.github.com/gists/${gistId}`, {
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${githubToken}`
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`クラウド取得失敗 (${response.status})`);
-      }
-
-      const gist = await response.json();
-      const file = gist.files && gist.files[gistFilename];
-      if (!file || typeof file.content !== "string") {
-        throw new Error("指定ファイルがGistに見つかりません。");
-      }
-
-      const parsed = JSON.parse(file.content);
-      const remoteData = parsed && parsed.data ? parsed.data : {};
-      const remoteProfile = normalizeAuthProfileObject(remoteData.authProfile);
-      if (!remoteProfile) {
-        throw new Error("クラウドにログイン情報がありません。登録済み端末で一度クラウド保存を実行してください。");
-      }
-
-      authProfile = remoteProfile;
-      persistAuthProfile(authProfile);
-      authMode = "login";
-      authenticatedUserId = "";
-      refs.authUserId.value = authProfile.userId;
-      refs.authPassword.value = "";
-      refs.authPasswordConfirm.value = "";
-      renderAuthView();
-
-      state.sync.githubToken = githubToken;
-      state.sync.gistId = gistId;
-      state.sync.gistFilename = gistFilename;
-      state.sync.userId = authProfile.userId;
-      persistState();
-
-      setAuthStatus("クラウドからログイン情報を復元しました。ログインしてください。");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "クラウド復元に失敗しました。";
-      setAuthStatus(message);
-      alert(message);
-    }
   }
 
   function unlockApp() {
@@ -455,7 +331,8 @@
     queueAutoPullOnOpen();
   }
 
-  function lockApp() {
+  function lockApp(options) {
+    const clearStatus = !options || options.clearStatus !== false;
     refs.appMain.hidden = true;
     refs.authScreen.hidden = false;
     refs.logoutButton.hidden = true;
@@ -463,8 +340,10 @@
     refs.authPasswordConfirm.value = "";
     authenticatedUserId = "";
     updateCurrentUserLabel();
-    authMode = authProfile ? "login" : "register";
-    setAuthStatus("");
+    authMode = "login";
+    if (clearStatus) {
+      setAuthStatus("");
+    }
     renderAuthView();
   }
 
@@ -480,8 +359,19 @@
     refs.authStatus.textContent = text;
   }
 
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
   function bindEvents() {
-    refs.logoutButton.addEventListener("click", () => {
+    refs.logoutButton.addEventListener("click", async () => {
+      if (supabaseClient) {
+        const { error } = await supabaseClient.auth.signOut();
+        if (error) {
+          alert(`ログアウトに失敗しました: ${error.message}`);
+          return;
+        }
+      }
       lockApp();
     });
 
@@ -2714,7 +2604,6 @@
       const remoteShifts = normalizeShiftsMap(remoteData.shifts);
       const remoteMasters = normalizeMasters(remoteData.masters);
       const remoteSettings = isObject(remoteData.settings) ? remoteData.settings : {};
-      const remoteAuthProfile = normalizeAuthProfileObject(remoteData.authProfile);
       const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : "不明";
 
       if (mode === "overwrite") {
@@ -2738,10 +2627,6 @@
 
       state.sync.lastSyncedAt = new Date().toISOString();
       persistState();
-      if (remoteAuthProfile) {
-        authProfile = remoteAuthProfile;
-        persistAuthProfile(authProfile);
-      }
       selectedShiftId = null;
       selectedMasterId = null;
       selectedPatternId = null;
@@ -2832,8 +2717,7 @@
       data: {
         shifts: state.shifts,
         masters: state.masters,
-        settings: state.settings,
-        authProfile: authProfile || null
+        settings: state.settings
       }
     };
   }
@@ -3024,27 +2908,6 @@
     return new TextDecoder().decode(bytes);
   }
 
-  function createSalt() {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    return bytesToHex(bytes);
-  }
-
-  async function hashPassword(userId, password, salt) {
-    const input = `${userId}:${password}:${salt}`;
-    const encoded = new TextEncoder().encode(input);
-    const digest = await crypto.subtle.digest("SHA-256", encoded);
-    return bytesToHex(new Uint8Array(digest));
-  }
-
-  function bytesToHex(bytes) {
-    let hex = "";
-    for (const value of bytes) {
-      hex += value.toString(16).padStart(2, "0");
-    }
-    return hex;
-  }
-
   function setSyncStatus(text) {
     refs.syncStatus.textContent = text;
   }
@@ -3148,46 +3011,6 @@
       console.error(error);
       return cloneDefaultState();
     }
-  }
-
-  function loadAuthProfile() {
-    try {
-      const raw = localStorage.getItem(AUTH_PROFILE_KEY);
-      if (!raw) {
-        return null;
-      }
-      const parsed = JSON.parse(raw);
-      return normalizeAuthProfileObject(parsed);
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function normalizeAuthProfileObject(value) {
-    if (!isObject(value)) {
-      return null;
-    }
-    if (
-      typeof value.userId !== "string" ||
-      !value.userId.trim() ||
-      typeof value.salt !== "string" ||
-      !value.salt ||
-      typeof value.passwordHash !== "string" ||
-      !value.passwordHash
-    ) {
-      return null;
-    }
-    return {
-      version: 1,
-      userId: value.userId.trim(),
-      salt: value.salt,
-      passwordHash: value.passwordHash,
-      updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : ""
-    };
-  }
-
-  function persistAuthProfile(profile) {
-    localStorage.setItem(AUTH_PROFILE_KEY, JSON.stringify(profile));
   }
 
   function persistState() {
