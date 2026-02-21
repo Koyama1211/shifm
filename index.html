@@ -49,7 +49,10 @@
     <main id="appMain" class="container" hidden>
       <header class="app-header">
         <div class="app-header-row">
-          <h1>個人バイトシフト管理</h1>
+          <div>
+            <h1>個人バイトシフト管理</h1>
+            <p id="currentUserLabel" class="section-note">ログイン中: -</p>
+          </div>
           <button id="logoutButton" type="button">ログアウト</button>
         </div>
         <p>カレンダーで管理しつつ、給与を自動計算</p>
@@ -79,30 +82,42 @@
                 <h4>選択日のシフト</h4>
                 <p id="selectedDayShiftsLabel" class="section-note">日付を選択してください</p>
               </div>
+              <div class="actions inline-actions">
+                <button id="jumpToForm" type="button">この日の入力へ移動</button>
+              </div>
               <ul id="dayShiftList" class="day-shift-list"></ul>
             </div>
           </section>
 
-          <section class="panel form-panel">
+          <section id="shiftFormPanel" class="panel form-panel">
             <h3 id="selectedDateLabel">日付を選択してください</h3>
             <p id="editingStatus" class="editing-status">新規シフトを入力中</p>
             <form id="shiftForm">
               <input id="editingShiftId" name="editingShiftId" type="hidden" />
               <h4 class="form-section-title">基本入力</h4>
+              <p class="section-note"><span class="required-mark">*</span> は必須項目です。</p>
               <div class="field-row split">
                 <div>
                   <label for="workplaceMaster">勤務先マスタ</label>
                   <select id="workplaceMaster" name="workplaceMaster">
                     <option value="">未選択</option>
                   </select>
+                  <p class="section-note">選択時に勤務先・時給・交通費へ自動反映します。</p>
                 </div>
                 <div class="field-row-inline">
-                  <button id="applyMasterToForm" type="button">マスタ反映</button>
+                  <button id="applyMasterToForm" type="button">マスタで上書き反映</button>
                 </div>
               </div>
               <div class="field-row">
-                <label for="workplace">勤務先</label>
-                <input id="workplace" name="workplace" type="text" placeholder="例: カフェA" list="workplaceSuggestions" />
+                <label for="workplace">勤務先 <span class="required-mark">*</span></label>
+                <input
+                  id="workplace"
+                  name="workplace"
+                  type="text"
+                  placeholder="例: カフェA"
+                  list="workplaceSuggestions"
+                  required
+                />
                 <datalist id="workplaceSuggestions"></datalist>
               </div>
               <details class="advanced-block compact-block">
@@ -124,21 +139,22 @@
               </details>
               <div class="field-row split">
                 <div>
-                  <label for="startTime">開始</label>
+                  <label for="startTime">開始 <span class="required-mark">*</span></label>
                   <input id="startTime" name="startTime" type="time" required />
                 </div>
                 <div>
-                  <label for="endTime">終了</label>
+                  <label for="endTime">終了 <span class="required-mark">*</span></label>
                   <input id="endTime" name="endTime" type="time" required />
                 </div>
               </div>
+              <p class="section-note">時刻欄をタップすると端末の時刻ピッカーを開けます。</p>
               <div class="field-row split">
                 <div>
                   <label for="breakMinutes">休憩(分)</label>
                   <input id="breakMinutes" name="breakMinutes" type="number" min="0" step="1" value="0" />
                 </div>
                 <div id="hourlyRateGroup">
-                  <label for="hourlyRate">時給(円)</label>
+                  <label for="hourlyRate">時給(円) <span class="required-mark">*</span></label>
                   <input id="hourlyRate" name="hourlyRate" type="number" min="0" step="1" required />
                 </div>
               </div>
@@ -147,33 +163,39 @@
                 <input id="transport" name="transport" type="number" min="0" step="1" value="0" />
               </div>
               <div class="field-row">
+                <label for="shiftStatus">勤務ステータス</label>
+                <select id="shiftStatus" name="shiftStatus">
+                  <option value="planned">予定</option>
+                  <option value="worked">勤務済み</option>
+                  <option value="paid">支払済み</option>
+                </select>
+              </div>
+              <div class="field-row">
                 <label for="memo">メモ</label>
                 <input id="memo" name="memo" type="text" placeholder="例: まかないあり" />
               </div>
-              <details class="advanced-block">
-                <summary>タイミー専用入力</summary>
-                <div class="field-row">
-                  <label>
-                    <input id="timeeEnabled" name="timeeEnabled" type="checkbox" />
-                    タイミー案件として記録する
-                  </label>
-                </div>
+              <div class="field-row">
+                <label>
+                  <input id="timeeEnabled" name="timeeEnabled" type="checkbox" />
+                  タイミー案件として入力する
+                </label>
+              </div>
+              <div id="timeeFields" class="sub-form compact-sub-form" hidden>
                 <div class="field-row split">
                   <div>
                     <label for="timeeJobId">案件ID</label>
                     <input id="timeeJobId" name="timeeJobId" type="text" placeholder="例: TMY-123456" />
                   </div>
                   <div>
-                    <label for="timeeFixedPay">総支給額(円)</label>
-                    <input id="timeeFixedPay" name="timeeFixedPay" type="number" min="0" step="1" />
+                    <label for="timeeFixedPay">総支給額(円) <span class="required-mark">*</span></label>
+                    <input id="timeeFixedPay" name="timeeFixedPay" type="number" min="0" step="1" required />
                   </div>
                 </div>
                 <p class="section-note">タイミー案件では総支給額を入力してください（時給計算より優先）。</p>
-              </details>
+              </div>
               <div class="actions">
                 <button type="submit" class="primary">保存</button>
                 <button id="newShift" type="button">新規入力</button>
-                <button id="deleteShift" type="button" class="danger">削除</button>
               </div>
             </form>
             <details class="advanced-block low-frequency-block">
@@ -182,6 +204,7 @@
                 <button id="saveAsMaster" type="button">勤務先マスタに保存</button>
                 <button id="addGoogleCalendar" type="button">Google Calendar登録</button>
                 <button id="addDayGoogleCalendar" type="button">当日分をGoogle登録</button>
+                <button id="deleteShift" type="button" class="danger">選択シフトを削除</button>
               </div>
               <div class="advanced-divider"></div>
               <div id="bulkShiftForm" class="sub-form">
@@ -311,6 +334,7 @@
                   <th>日付</th>
                   <th>勤務先</th>
                   <th>勤務時間</th>
+                  <th>状態</th>
                   <th>支給額</th>
                 </tr>
               </thead>

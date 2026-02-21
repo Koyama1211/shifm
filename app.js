@@ -58,6 +58,7 @@
     authStatus: document.getElementById("authStatus"),
     authSubmit: document.getElementById("authSubmit"),
     authToggleMode: document.getElementById("authToggleMode"),
+    currentUserLabel: document.getElementById("currentUserLabel"),
     logoutButton: document.getElementById("logoutButton"),
     viewTabs: Array.from(document.querySelectorAll(".view-tab")),
     viewSections: Array.from(document.querySelectorAll(".view-section")),
@@ -73,6 +74,8 @@
 
     selectedDateLabel: document.getElementById("selectedDateLabel"),
     selectedDayShiftsLabel: document.getElementById("selectedDayShiftsLabel"),
+    jumpToForm: document.getElementById("jumpToForm"),
+    shiftFormPanel: document.getElementById("shiftFormPanel"),
     editingStatus: document.getElementById("editingStatus"),
     shiftForm: document.getElementById("shiftForm"),
     editingShiftId: document.getElementById("editingShiftId"),
@@ -89,8 +92,10 @@
     hourlyRateGroup: document.getElementById("hourlyRateGroup"),
     transport: document.getElementById("transport"),
     transportGroup: document.getElementById("transportGroup"),
+    shiftStatus: document.getElementById("shiftStatus"),
     memo: document.getElementById("memo"),
     timeeEnabled: document.getElementById("timeeEnabled"),
+    timeeFields: document.getElementById("timeeFields"),
     timeeJobId: document.getElementById("timeeJobId"),
     timeeFixedPay: document.getElementById("timeeFixedPay"),
     newShift: document.getElementById("newShift"),
@@ -175,6 +180,7 @@
   async function init() {
     bindAuthEvents();
     renderAuthView();
+    updateCurrentUserLabel();
     bindEvents();
     registerServiceWorker();
   }
@@ -288,6 +294,7 @@
       persistState();
     }
 
+    updateCurrentUserLabel();
     renderAll();
     queueAutoPullOnOpen();
   }
@@ -299,9 +306,18 @@
     refs.authPassword.value = "";
     refs.authPasswordConfirm.value = "";
     authenticatedUserId = "";
+    updateCurrentUserLabel();
     authMode = authProfile ? "login" : "register";
     setAuthStatus("");
     renderAuthView();
+  }
+
+  function updateCurrentUserLabel() {
+    if (!refs.currentUserLabel) {
+      return;
+    }
+    const userId = authenticatedUserId || state.sync.userId || "-";
+    refs.currentUserLabel.textContent = `ログイン中: ${userId}`;
   }
 
   function setAuthStatus(text) {
@@ -330,6 +346,14 @@
 
     refs.nextMonth.addEventListener("click", () => {
       changeCurrentMonth(1);
+    });
+
+    refs.jumpToForm.addEventListener("click", () => {
+      if (!selectedDate) {
+        alert("先に日付を選択してください。");
+        return;
+      }
+      scrollToShiftForm();
     });
 
     refs.summaryPrevMonth.addEventListener("click", () => {
@@ -417,6 +441,9 @@
       event.preventDefault();
       if (!selectedDate) {
         alert("先に日付を選択してください。");
+        return;
+      }
+      if (typeof refs.shiftForm.reportValidity === "function" && !refs.shiftForm.reportValidity()) {
         return;
       }
 
@@ -716,6 +743,20 @@
     renderSummary();
   }
 
+  function isCompactViewport() {
+    return typeof window.matchMedia === "function" && window.matchMedia("(max-width: 860px)").matches;
+  }
+
+  function scrollToShiftForm() {
+    if (!refs.shiftFormPanel) {
+      return;
+    }
+    refs.shiftFormPanel.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+
   function renderCalendar() {
     refs.monthLabel.textContent = `${currentMonth.getFullYear()}年 ${currentMonth.getMonth() + 1}月`;
     refs.calendarGrid.innerHTML = "";
@@ -763,6 +804,12 @@
         count.textContent = `${dayShifts.length}件`;
         cell.appendChild(count);
 
+        const summary = summarizeDayStatus(dayShifts);
+        const status = document.createElement("div");
+        status.className = `day-status ${summary.className}`;
+        status.textContent = summary.label;
+        cell.appendChild(status);
+
         const pay = document.createElement("div");
         pay.className = "day-pay";
         pay.textContent = formatCurrency(grossTotal);
@@ -776,6 +823,9 @@
         renderCalendar();
         renderShiftForm();
         renderDayShiftList();
+        if (isCompactViewport()) {
+          scrollToShiftForm();
+        }
       });
 
       refs.calendarGrid.appendChild(cell);
@@ -806,6 +856,7 @@
     refs.breakMinutes.value = editing.breakMinutes;
     refs.hourlyRate.value = editing.hourlyRate;
     refs.transport.value = editing.transport;
+    refs.shiftStatus.value = normalizeShiftStatus(editing.shiftStatus);
     refs.memo.value = editing.memo || "";
     refs.timeeEnabled.checked = Boolean(editing.timeeEnabled);
     refs.timeeJobId.value = editing.timeeJobId || "";
@@ -846,20 +897,37 @@
         li.classList.add("active");
       }
 
-      const title = shift.workplace ? shift.workplace : "勤務先未入力";
+      const left = document.createElement("div");
+      const titleEl = document.createElement("div");
+      titleEl.className = "day-shift-title";
+      titleEl.textContent = `${shift.startTime}-${shift.endTime}`;
+      left.appendChild(titleEl);
+
+      const workplaceLabel = shift.workplace ? shift.workplace : "勤務先未入力";
       const lineText = shift.lineName ? ` / ${shift.lineName}` : "";
       const patternText = shift.patternName ? ` / ${shift.patternName}` : "";
       const timeeText = shift.timeeEnabled ? ` / タイミー${shift.timeeJobId ? `(${shift.timeeJobId})` : ""}` : "";
       const memo = shift.memo ? ` / ${shift.memo}` : "";
-      li.innerHTML =
-        '<div><div class="day-shift-title">' +
-        escapeHtml(`${shift.startTime}-${shift.endTime}`) +
-        '</div><div class="day-shift-sub">' +
-        escapeHtml(`${title}${lineText}${patternText}${timeeText}${memo}`) +
-        "</div></div>" +
-        '<div class="day-shift-pay">' +
-        escapeHtml(formatCurrency(result.gross)) +
-        "</div>";
+
+      const sub = document.createElement("div");
+      sub.className = "day-shift-sub day-shift-meta";
+      const status = document.createElement("span");
+      const normalizedStatus = normalizeShiftStatus(shift.shiftStatus);
+      status.className = `shift-status-badge ${getShiftStatusClass(normalizedStatus)}`;
+      status.textContent = getShiftStatusLabel(normalizedStatus);
+      sub.appendChild(status);
+
+      const details = document.createElement("span");
+      details.textContent = `${workplaceLabel}${lineText}${patternText}${timeeText}${memo}`;
+      sub.appendChild(details);
+      left.appendChild(sub);
+
+      const pay = document.createElement("div");
+      pay.className = "day-shift-pay";
+      pay.textContent = formatCurrency(result.gross);
+
+      li.appendChild(left);
+      li.appendChild(pay);
 
       li.addEventListener("click", () => {
         selectedShiftId = shift.id;
@@ -1063,8 +1131,10 @@
 
   function renderTimeeInputState() {
     const enabled = Boolean(refs.timeeEnabled.checked);
+    refs.timeeFields.hidden = !enabled;
     refs.timeeJobId.disabled = !enabled;
     refs.timeeFixedPay.disabled = !enabled;
+    refs.timeeFixedPay.required = enabled;
     refs.hourlyRate.disabled = enabled;
     refs.transport.disabled = enabled;
     refs.hourlyRateGroup.hidden = enabled;
@@ -1354,6 +1424,7 @@
       const workplaceBase = row.shift.workplace || "-";
       const workplaceLabel = row.shift.timeeEnabled ? `タイミー / ${workplaceBase}` : workplaceBase;
       const workplaceText = row.shift.memo ? `${workplaceLabel} (${row.shift.memo})` : workplaceLabel;
+      const normalizedStatus = normalizeShiftStatus(row.shift.shiftStatus);
       tr.innerHTML =
         "<td>" +
         escapeHtml(row.dateKey) +
@@ -1364,6 +1435,11 @@
         "<td>" +
         escapeHtml(`${row.shift.startTime}-${row.shift.endTime}`) +
         "</td>" +
+        '<td><span class="shift-status-badge ' +
+        escapeHtml(getShiftStatusClass(normalizedStatus)) +
+        '">' +
+        escapeHtml(getShiftStatusLabel(normalizedStatus)) +
+        "</span></td>" +
         "<td>" +
         escapeHtml(formatCurrency(row.result.gross)) +
         "</td>";
@@ -1372,7 +1448,7 @@
 
     if (filteredRows.length === 0) {
       const tr = document.createElement("tr");
-      tr.innerHTML = '<td colspan="4">該当データがありません。</td>';
+      tr.innerHTML = '<td colspan="5">該当データがありません。</td>';
       refs.monthlyRows.appendChild(tr);
     }
 
@@ -1477,6 +1553,7 @@
     refs.breakMinutes.value = 0;
     refs.hourlyRate.value = state.settings.defaultHourlyRate;
     refs.transport.value = 0;
+    refs.shiftStatus.value = "planned";
     refs.memo.value = "";
     refs.timeeEnabled.checked = false;
     refs.timeeJobId.value = "";
@@ -1519,6 +1596,7 @@
       breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
       hourlyRate: toNonNegativeNumber(refs.hourlyRate.value, state.settings.defaultHourlyRate),
       transport: toNonNegativeNumber(refs.transport.value, 0),
+      shiftStatus: normalizeShiftStatus(refs.shiftStatus.value),
       memo: refs.memo.value.trim(),
       timeeEnabled,
       timeeJobId: timeeEnabled ? refs.timeeJobId.value.trim() : "",
@@ -1552,7 +1630,7 @@
       throw new Error("タイミー案件では総支給額(円)を入力してください。");
     }
 
-    if (shift.hourlyRate <= 0) {
+    if (!shift.timeeEnabled && shift.hourlyRate <= 0) {
       throw new Error("時給を入力してください。");
     }
 
@@ -1695,6 +1773,10 @@
       breakMinutes: toNonNegativeNumber(refs.bulkBreakMinutes.value, 0),
       hourlyRate: toPositiveNumber(refs.bulkHourlyRate.value, state.settings.defaultHourlyRate),
       transport: toNonNegativeNumber(refs.bulkTransport.value, 0),
+      shiftStatus: "planned",
+      timeeEnabled: false,
+      timeeJobId: "",
+      timeeFixedPay: 0,
       memo: ""
     };
 
@@ -2072,7 +2154,9 @@
     url.searchParams.set("dates", `${toGoogleUtc(range.start)}/${toGoogleUtc(range.end)}`);
     url.searchParams.set(
       "details",
-      `勤務: ${shift.startTime}-${shift.endTime}\n休憩: ${shift.breakMinutes}分\n時給: ${shift.hourlyRate}円${
+      `勤務: ${shift.startTime}-${shift.endTime}\n状態: ${getShiftStatusLabel(
+        normalizeShiftStatus(shift.shiftStatus)
+      )}\n休憩: ${shift.breakMinutes}分\n時給: ${shift.hourlyRate}円${
         shift.timeeEnabled ? `\nタイミー案件ID: ${shift.timeeJobId || "-"}` : ""
       }${
         shift.timeeEnabled && shift.timeeFixedPay > 0 ? `\nタイミー総支給額: ${shift.timeeFixedPay}円` : ""
@@ -2503,6 +2587,7 @@
       "タイミー案件",
       "タイミー案件ID",
       "タイミー総支給額",
+      "勤務ステータス",
       "メモ",
       "労働時間(時間)",
       "支給額",
@@ -2528,6 +2613,7 @@
         row.shift.timeeEnabled ? "はい" : "いいえ",
         row.shift.timeeJobId || "",
         row.shift.timeeFixedPay || 0,
+        getShiftStatusLabel(normalizeShiftStatus(row.shift.shiftStatus)),
         row.shift.memo || "",
         (row.result.workedMinutes / 60).toFixed(2),
         row.result.gross,
@@ -2694,6 +2780,7 @@
       breakMinutes: toNonNegativeNumber(raw.breakMinutes, 0),
       hourlyRate: toPositiveNumber(raw.hourlyRate, defaultState.settings.defaultHourlyRate),
       transport: toNonNegativeNumber(raw.transport, 0),
+      shiftStatus: normalizeShiftStatus(raw.shiftStatus),
       memo: typeof raw.memo === "string" ? raw.memo : "",
       timeeEnabled: Boolean(raw.timeeEnabled),
       timeeJobId: typeof raw.timeeJobId === "string" ? raw.timeeJobId.trim() : "",
@@ -2903,6 +2990,78 @@
     }
 
     return "";
+  }
+
+  function normalizeShiftStatus(value) {
+    if (value === "worked" || value === "paid" || value === "planned") {
+      return value;
+    }
+    return "planned";
+  }
+
+  function getShiftStatusLabel(status) {
+    const normalized = normalizeShiftStatus(status);
+    if (normalized === "worked") {
+      return "勤務済み";
+    }
+    if (normalized === "paid") {
+      return "支払済み";
+    }
+    return "予定";
+  }
+
+  function getShiftStatusClass(status) {
+    const normalized = normalizeShiftStatus(status);
+    return `status-${normalized}`;
+  }
+
+  function summarizeDayStatus(dayShifts) {
+    if (!Array.isArray(dayShifts) || dayShifts.length === 0) {
+      return {
+        label: "予定",
+        className: "status-planned"
+      };
+    }
+
+    let planned = 0;
+    let worked = 0;
+    let paid = 0;
+    for (const shift of dayShifts) {
+      const status = normalizeShiftStatus(shift.shiftStatus);
+      if (status === "paid") {
+        paid += 1;
+      } else if (status === "worked") {
+        worked += 1;
+      } else {
+        planned += 1;
+      }
+    }
+
+    if (paid === dayShifts.length) {
+      return {
+        label: "支払済",
+        className: "status-paid"
+      };
+    }
+
+    if (planned === dayShifts.length) {
+      return {
+        label: "予定",
+        className: "status-planned"
+      };
+    }
+
+    if (planned === 0 && worked + paid === dayShifts.length) {
+      return {
+        label: "勤務済",
+        className: "status-worked"
+      };
+    }
+
+    return {
+      label: "混在",
+      className: "status-mixed"
+    };
   }
 
   function sortShifts(shifts) {
