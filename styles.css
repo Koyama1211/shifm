@@ -368,6 +368,14 @@ label {
   color: var(--text-muted);
 }
 
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
 .required-mark {
   color: var(--danger);
   font-weight: 700;
@@ -382,6 +390,11 @@ textarea {
   padding: 8px 10px;
   font-size: 0.95rem;
   background: #fff;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  min-height: auto;
 }
 
 input:focus,
@@ -845,6 +858,10 @@ th {
   .mini-btn,
   .danger {
     min-height: 44px;
+  }
+
+  input[type="checkbox"] {
+    min-height: auto;
   }
 
   .actions button,

@@ -132,6 +132,7 @@
     masterForm: document.getElementById("masterForm"),
     masterId: document.getElementById("masterId"),
     masterName: document.getElementById("masterName"),
+    masterIsTimee: document.getElementById("masterIsTimee"),
     masterOvertimeThreshold: document.getElementById("masterOvertimeThreshold"),
     masterOvertimeMultiplier: document.getElementById("masterOvertimeMultiplier"),
     masterTaxRate: document.getElementById("masterTaxRate"),
@@ -1060,6 +1061,7 @@
     if (!selected) {
       refs.masterId.value = "";
       refs.masterName.value = "";
+      refs.masterIsTimee.checked = false;
       refs.masterOvertimeThreshold.value = state.settings.overtimeThreshold;
       refs.masterOvertimeMultiplier.value = state.settings.overtimeMultiplier;
       refs.masterTaxRate.value = state.settings.taxRate;
@@ -1072,6 +1074,7 @@
 
     refs.masterId.value = selected.id;
     refs.masterName.value = selected.name;
+    refs.masterIsTimee.checked = isTimeeMasterEntry(selected);
     refs.masterOvertimeThreshold.value = selected.overtimeThreshold;
     refs.masterOvertimeMultiplier.value = selected.overtimeMultiplier;
     refs.masterTaxRate.value = selected.taxRate;
@@ -1102,6 +1105,7 @@
       li.innerHTML =
         "<div><div>" +
         escapeHtml(master.name) +
+        (isTimeeMasterEntry(master) ? ' <span class="shift-status-badge status-worked">Timee</span>' : "") +
         '</div><div class="master-item-sub">' +
         escapeHtml(
           `現在 時給 ${formatCurrency(master.defaultHourlyRate)} / 交通費 ${formatCurrency(master.defaultTransport)} / 履歴 ${getMasterPayRates(
@@ -1493,7 +1497,8 @@
       const currentRate = resolveMasterPayRateForDate(master, toDateKey(new Date()));
       const option = document.createElement("option");
       option.value = master.id;
-      option.textContent = `${master.name} (時給 ${Number(currentRate.hourlyRate).toLocaleString("ja-JP")}円)`;
+      const timeeLabel = isTimeeMasterEntry(master) ? " [Timee]" : "";
+      option.textContent = `${master.name}${timeeLabel} (時給 ${Number(currentRate.hourlyRate).toLocaleString("ja-JP")}円)`;
       selectElement.appendChild(option);
     }
 
@@ -2035,7 +2040,7 @@
 
     const override = !options || options.override !== false;
     const remember = !options || options.remember !== false;
-    const isTimeeMaster = isTimeeWorkplaceName(master.name);
+    const masterIsTimee = isTimeeMasterEntry(master);
     const previousMasterId = refs.workplaceMaster.value;
     refs.workplaceMaster.value = master.id;
     if (previousMasterId !== master.id) {
@@ -2044,9 +2049,9 @@
     }
 
     if (override) {
-      refs.workplace.value = isTimeeMaster ? "" : master.name;
+      refs.workplace.value = masterIsTimee ? "" : master.name;
     } else {
-      if (!refs.workplace.value.trim() && !isTimeeMaster) {
+      if (!refs.workplace.value.trim() && !masterIsTimee) {
         refs.workplace.value = master.name;
       }
     }
@@ -2341,6 +2346,7 @@
     const master = {
       id: masterId,
       name,
+      isTimee: Boolean(refs.timeeEnabled.checked || (existing && existing.isTimee)),
       defaultHourlyRate: compensation.hourlyRate,
       defaultTransport: compensation.transport,
       overtimeThreshold: existing ? existing.overtimeThreshold : state.settings.overtimeThreshold,
@@ -2374,6 +2380,7 @@
   function saveMasterFromForm() {
     const idFromForm = refs.masterId.value.trim();
     const name = refs.masterName.value.trim();
+    const isTimee = Boolean(refs.masterIsTimee.checked);
     const overtimeThreshold = toNonNegativeNumber(refs.masterOvertimeThreshold.value, state.settings.overtimeThreshold);
     const overtimeMultiplier = Math.max(1, toPositiveNumber(refs.masterOvertimeMultiplier.value, state.settings.overtimeMultiplier));
     const taxRate = clamp(toNonNegativeNumber(refs.masterTaxRate.value, state.settings.taxRate), 0, 100);
@@ -2403,6 +2410,7 @@
     const master = {
       id: targetId,
       name,
+      isTimee,
       defaultHourlyRate: currentRate.hourlyRate,
       defaultTransport: currentRate.transport,
       overtimeThreshold,
@@ -2849,6 +2857,7 @@
         byName.set(key, {
           ...existing,
           name: master.name,
+          isTimee: Boolean(existing.isTimee || master.isTimee),
           defaultHourlyRate: currentRate.hourlyRate,
           defaultTransport: currentRate.transport,
           overtimeThreshold: master.overtimeThreshold,
@@ -3257,10 +3266,12 @@
       toNonNegativeNumber(raw.defaultTransport, 0)
     );
     const todayRate = resolvePayRateForDate(normalizedRates, toDateKey(new Date()));
+    const isTimee = Boolean(raw.isTimee) || isTimeeWorkplaceName(name);
 
     return {
       id,
       name,
+      isTimee,
       defaultHourlyRate: todayRate.hourlyRate,
       defaultTransport: todayRate.transport,
       overtimeThreshold: toNonNegativeNumber(raw.overtimeThreshold, defaultState.settings.overtimeThreshold),
@@ -3563,12 +3574,19 @@
     return normalized.includes("タイミー") || normalized.includes("timee");
   }
 
+  function isTimeeMasterEntry(master) {
+    if (!master) {
+      return false;
+    }
+    return Boolean(master.isTimee) || isTimeeWorkplaceName(master.name);
+  }
+
   function syncTimeeModeByWorkplace() {
     const wasEnabled = Boolean(refs.timeeEnabled.checked);
     const master = getMasterById(refs.workplaceMaster.value);
     const fromMaster = master ? master.name : "";
     const fromInput = refs.workplace.value;
-    const masterIsTimee = isTimeeWorkplaceName(fromMaster);
+    const masterIsTimee = master ? isTimeeMasterEntry(master) : isTimeeWorkplaceName(fromMaster);
     const enabled = masterIsTimee || isTimeeWorkplaceName(fromInput);
     refs.timeeEnabled.checked = enabled;
 
