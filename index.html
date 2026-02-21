@@ -132,6 +132,7 @@
                   required
                 />
                 <datalist id="workplaceSuggestions"></datalist>
+                <p id="timeeWorkplaceNote" class="section-note" hidden>タイミー選択時は案件先の勤務先名を入力してください。</p>
               </div>
               <details class="advanced-block compact-block">
                 <summary>勤務パターン（任意）</summary>
@@ -174,26 +175,26 @@
                   </select>
                 </div>
               </div>
-              <input id="hourlyRate" name="hourlyRate" type="hidden" />
-              <input id="transport" name="transport" type="hidden" />
+              <div id="timeeCompensationFields" class="field-row split" hidden>
+                <div id="hourlyRateGroup">
+                  <label for="hourlyRate">時給(円) <span class="required-mark">*</span></label>
+                  <input id="hourlyRate" name="hourlyRate" type="number" min="0" step="1" />
+                </div>
+                <div id="transportGroup">
+                  <label for="transport">交通費(円)</label>
+                  <input id="transport" name="transport" type="number" min="0" step="1" value="0" />
+                </div>
+              </div>
               <div class="field-row">
                 <label for="memo">メモ</label>
                 <input id="memo" name="memo" type="text" placeholder="例: まかないあり" />
               </div>
               <input id="timeeEnabled" name="timeeEnabled" type="checkbox" hidden />
-              <div id="timeeFields" class="sub-form compact-sub-form" hidden>
-                <h4 class="form-section-title">タイミー専用入力</h4>
-                <div class="field-row split">
-                  <div>
-                    <label for="timeeJobId">案件ID</label>
-                    <input id="timeeJobId" name="timeeJobId" type="text" placeholder="例: TMY-123456" />
-                  </div>
-                  <div>
-                    <label for="timeeFixedPay">総支給額(円) <span class="required-mark">*</span></label>
-                    <input id="timeeFixedPay" name="timeeFixedPay" type="number" min="0" step="1" required />
-                  </div>
-                </div>
-                <p class="section-note">タイミー案件では総支給額を入力してください（時給計算より優先）。</p>
+              <div class="compact-block">
+                <p class="section-note">保存前見込み</p>
+                <p class="editing-status">
+                  労働時間: <strong id="previewWorkedHours">-</strong> / 支給見込み: <strong id="previewGrossPay">-</strong>
+                </p>
               </div>
               <div class="actions">
                 <button type="submit" class="primary">保存</button>

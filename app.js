@@ -89,17 +89,20 @@
     shiftLine: document.getElementById("shiftLine"),
     shiftPattern: document.getElementById("shiftPattern"),
     workplaceSuggestions: document.getElementById("workplaceSuggestions"),
+    timeeWorkplaceNote: document.getElementById("timeeWorkplaceNote"),
     startTime: document.getElementById("startTime"),
     endTime: document.getElementById("endTime"),
     breakMinutes: document.getElementById("breakMinutes"),
     hourlyRate: document.getElementById("hourlyRate"),
+    hourlyRateGroup: document.getElementById("hourlyRateGroup"),
     transport: document.getElementById("transport"),
+    transportGroup: document.getElementById("transportGroup"),
+    timeeCompensationFields: document.getElementById("timeeCompensationFields"),
     shiftStatus: document.getElementById("shiftStatus"),
     memo: document.getElementById("memo"),
+    previewWorkedHours: document.getElementById("previewWorkedHours"),
+    previewGrossPay: document.getElementById("previewGrossPay"),
     timeeEnabled: document.getElementById("timeeEnabled"),
-    timeeFields: document.getElementById("timeeFields"),
-    timeeJobId: document.getElementById("timeeJobId"),
-    timeeFixedPay: document.getElementById("timeeFixedPay"),
     newShift: document.getElementById("newShift"),
     saveAsMaster: document.getElementById("saveAsMaster"),
     deleteShift: document.getElementById("deleteShift"),
@@ -456,27 +459,28 @@
         applyCompensationToFormFromSelection();
         syncTimeeModeByWorkplace();
         renderShiftPatternControls();
+        renderShiftPreview();
         persistUiState();
         return;
       }
       applyMasterToShiftForm(masterId, { override: true, remember: true });
       syncTimeeModeByWorkplace();
+      renderShiftPreview();
     });
 
     refs.workplace.addEventListener("input", () => {
       syncTimeeModeByWorkplace();
+      renderShiftPreview();
     });
 
     refs.shiftLine.addEventListener("change", () => {
       renderShiftPatternControls();
+      renderShiftPreview();
     });
 
     refs.shiftPattern.addEventListener("change", () => {
       applySelectedShiftPattern();
-    });
-
-    refs.timeeEnabled.addEventListener("change", () => {
-      renderTimeeInputState();
+      renderShiftPreview();
     });
 
     refs.bulkWorkplaceMaster.addEventListener("change", () => {
@@ -520,7 +524,24 @@
         return;
       }
       applyMasterToShiftForm(masterId, { override: true, remember: true });
+      renderShiftPreview();
     });
+
+    const shiftPreviewFields = [
+      refs.startTime,
+      refs.endTime,
+      refs.breakMinutes,
+      refs.hourlyRate,
+      refs.transport
+    ];
+    for (const field of shiftPreviewFields) {
+      field.addEventListener("input", () => {
+        renderShiftPreview();
+      });
+      field.addEventListener("change", () => {
+        renderShiftPreview();
+      });
+    }
 
     refs.shiftForm.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -791,6 +812,7 @@
     renderSyncForm();
     renderCalendar();
     renderShiftForm();
+    renderShiftPreview();
     renderDayShiftList();
     renderSummary();
   }
@@ -957,19 +979,16 @@
     refs.shiftStatus.value = normalizeShiftStatus(editing.shiftStatus);
     refs.memo.value = editing.memo || "";
     refs.timeeEnabled.checked = Boolean(editing.timeeEnabled);
-    refs.timeeJobId.value = editing.timeeJobId || "";
-    refs.timeeFixedPay.value = editing.timeeFixedPay > 0 ? editing.timeeFixedPay : "";
 
     const matchedMasterId = resolveMasterIdForShift(editing);
     refs.workplaceMaster.value = matchedMasterId || "";
     refs.shiftLine.value = editing.lineName || "";
     refs.shiftPattern.value = editing.patternId || "";
     applyCompensationToFormFromSelection(editing);
-    if (!editing.timeeEnabled) {
-      syncTimeeModeByWorkplace();
-    }
+    syncTimeeModeByWorkplace();
     renderShiftPatternControls();
     renderTimeeInputState();
+    renderShiftPreview();
 
     refs.editingStatus.textContent = "一覧から選択したシフトを編集中";
   }
@@ -1008,7 +1027,7 @@
       const workplaceLabel = shift.workplace ? shift.workplace : "勤務先未入力";
       const lineText = shift.lineName ? ` / ${shift.lineName}` : "";
       const patternText = shift.patternName ? ` / ${shift.patternName}` : "";
-      const timeeText = shift.timeeEnabled ? ` / タイミー${shift.timeeJobId ? `(${shift.timeeJobId})` : ""}` : "";
+      const timeeText = shift.timeeEnabled ? " / タイミー" : "";
       const memo = shift.memo ? ` / ${shift.memo}` : "";
 
       const sub = document.createElement("div");
@@ -1320,12 +1339,14 @@
 
   function renderTimeeInputState() {
     const enabled = Boolean(refs.timeeEnabled.checked);
-    refs.timeeFields.hidden = !enabled;
-    refs.timeeJobId.disabled = !enabled;
-    refs.timeeFixedPay.disabled = !enabled;
-    refs.timeeFixedPay.required = enabled;
-    refs.hourlyRate.disabled = true;
-    refs.transport.disabled = true;
+    refs.timeeCompensationFields.hidden = !enabled;
+    refs.timeeWorkplaceNote.hidden = !enabled;
+    refs.hourlyRate.required = enabled;
+    refs.transport.required = false;
+    refs.hourlyRate.disabled = !enabled;
+    refs.transport.disabled = !enabled;
+    refs.hourlyRateGroup.hidden = !enabled;
+    refs.transportGroup.hidden = !enabled;
   }
 
   function getMasterPatterns(master) {
@@ -1741,8 +1762,6 @@
     refs.shiftStatus.value = "planned";
     refs.memo.value = "";
     refs.timeeEnabled.checked = false;
-    refs.timeeJobId.value = "";
-    refs.timeeFixedPay.value = "";
 
     const preferredMaster = getMasterById(preferredWorkplaceMasterId);
     if (preferredMaster) {
@@ -1759,10 +1778,68 @@
     syncTimeeModeByWorkplace();
     renderShiftPatternControls();
     renderTimeeInputState();
+    renderShiftPreview();
 
     if (resetAll) {
       refs.editingStatus.textContent = "新規シフトを入力中";
     }
+  }
+
+  function renderShiftPreview() {
+    if (!selectedDate) {
+      refs.previewWorkedHours.textContent = "-";
+      refs.previewGrossPay.textContent = "-";
+      return;
+    }
+
+    const startTime = refs.startTime.value.trim();
+    const endTime = refs.endTime.value.trim();
+    if (!isValidTime(startTime) || !isValidTime(endTime)) {
+      refs.previewWorkedHours.textContent = "-";
+      refs.previewGrossPay.textContent = "-";
+      return;
+    }
+
+    const selectedMaster = getMasterById(refs.workplaceMaster.value);
+    const timeeEnabled = Boolean(refs.timeeEnabled.checked);
+    const compensation = resolveCompensationForShift(
+      selectedDate,
+      {
+        workplace: refs.workplace.value.trim(),
+        workplaceMasterId: selectedMaster ? selectedMaster.id : "",
+        timeeEnabled,
+        hourlyRate: toPositiveNumber(refs.hourlyRate.value, 0),
+        transport: toNonNegativeNumber(refs.transport.value, 0)
+      },
+      selectedMaster
+    );
+    if (compensation.hourlyRate <= 0) {
+      refs.previewWorkedHours.textContent = "-";
+      refs.previewGrossPay.textContent = "-";
+      return;
+    }
+
+    const shift = {
+      id: "__preview__",
+      workplace: refs.workplace.value.trim(),
+      workplaceMasterId: selectedMaster ? selectedMaster.id : "",
+      lineName: refs.shiftLine.value.trim(),
+      patternId: refs.shiftPattern.value || "",
+      patternName: "",
+      startTime,
+      endTime,
+      breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
+      hourlyRate: compensation.hourlyRate,
+      transport: compensation.transport,
+      shiftStatus: normalizeShiftStatus(refs.shiftStatus.value),
+      memo: refs.memo.value.trim(),
+      timeeEnabled,
+      timeeJobId: "",
+      timeeFixedPay: 0
+    };
+    const result = calcShiftPay(selectedDate, shift);
+    refs.previewWorkedHours.textContent = `${(result.workedMinutes / 60).toFixed(2)} 時間`;
+    refs.previewGrossPay.textContent = formatCurrency(result.gross);
   }
 
   function buildShiftFromForm() {
@@ -1780,6 +1857,8 @@
       },
       selectedMaster
     );
+    const hourlyRateInput = toPositiveNumber(refs.hourlyRate.value, 0);
+    const transportInput = toNonNegativeNumber(refs.transport.value, 0);
     const shift = {
       workplace: refs.workplace.value.trim(),
       workplaceMasterId: selectedMaster ? selectedMaster.id : "",
@@ -1789,25 +1868,25 @@
       startTime: refs.startTime.value.trim(),
       endTime: refs.endTime.value.trim(),
       breakMinutes: toNonNegativeNumber(refs.breakMinutes.value, 0),
-      hourlyRate: paySnapshot.hourlyRate,
-      transport: paySnapshot.transport,
+      hourlyRate: timeeEnabled ? hourlyRateInput : paySnapshot.hourlyRate,
+      transport: timeeEnabled ? transportInput : paySnapshot.transport,
       shiftStatus: normalizeShiftStatus(refs.shiftStatus.value),
       memo: refs.memo.value.trim(),
       timeeEnabled,
-      timeeJobId: timeeEnabled ? refs.timeeJobId.value.trim() : "",
-      timeeFixedPay: timeeEnabled ? toNonNegativeNumber(refs.timeeFixedPay.value, 0) : 0
+      timeeJobId: "",
+      timeeFixedPay: 0
     };
 
     if (selectedPattern && selectedPattern.lineName) {
       shift.lineName = selectedPattern.lineName;
     }
 
-    if (selectedMaster && !shift.workplace) {
+    if (selectedMaster && !shift.workplace && !timeeEnabled) {
       shift.workplace = selectedMaster.name;
     }
 
     if (!shift.workplace) {
-      throw new Error("勤務先を入力してください。");
+      throw new Error(timeeEnabled ? "タイミー案件先の勤務先名を入力してください。" : "勤務先を入力してください。");
     }
 
     if (!shift.workplaceMasterId) {
@@ -1821,8 +1900,8 @@
       throw new Error("開始時刻/終了時刻を正しく入力してください。");
     }
 
-    if (shift.timeeEnabled && shift.timeeFixedPay <= 0) {
-      throw new Error("タイミー案件では総支給額(円)を入力してください。");
+    if (shift.timeeEnabled && shift.hourlyRate <= 0) {
+      throw new Error("タイミー案件では時給を入力してください。");
     }
 
     return shift;
@@ -1836,6 +1915,7 @@
 
     const override = !options || options.override !== false;
     const remember = !options || options.remember !== false;
+    const isTimeeMaster = isTimeeWorkplaceName(master.name);
     const previousMasterId = refs.workplaceMaster.value;
     refs.workplaceMaster.value = master.id;
     if (previousMasterId !== master.id) {
@@ -1844,9 +1924,9 @@
     }
 
     if (override) {
-      refs.workplace.value = master.name;
+      refs.workplace.value = isTimeeMaster ? "" : master.name;
     } else {
-      if (!refs.workplace.value.trim()) {
+      if (!refs.workplace.value.trim() && !isTimeeMaster) {
         refs.workplace.value = master.name;
       }
     }
@@ -2415,14 +2495,9 @@
     const regularMinutes = Math.min(workedMinutes, overtimeStart);
     const overtimeMinutes = Math.max(0, workedMinutes - overtimeStart);
 
-    let gross;
-    if (shift.timeeEnabled && shift.timeeFixedPay > 0) {
-      gross = Math.round(shift.timeeFixedPay);
-    } else {
-      const regularPay = (regularMinutes / 60) * compensation.hourlyRate;
-      const overtimePay = (overtimeMinutes / 60) * compensation.hourlyRate * policy.overtimeMultiplier;
-      gross = Math.round(regularPay + overtimePay + compensation.transport);
-    }
+    const regularPay = (regularMinutes / 60) * compensation.hourlyRate;
+    const overtimePay = (overtimeMinutes / 60) * compensation.hourlyRate * policy.overtimeMultiplier;
+    const gross = Math.round(regularPay + overtimePay + compensation.transport);
     const net = Math.round(gross * (1 - policy.taxRate / 100));
 
     return {
@@ -2480,10 +2555,6 @@
       `勤務: ${shift.startTime}-${shift.endTime}\n状態: ${getShiftStatusLabel(
         normalizeShiftStatus(shift.shiftStatus)
       )}\n休憩: ${shift.breakMinutes}分\n時給: ${result.hourlyRate}円\n交通費: ${result.transport}円${
-        shift.timeeEnabled ? `\nタイミー案件ID: ${shift.timeeJobId || "-"}` : ""
-      }${
-        shift.timeeEnabled && shift.timeeFixedPay > 0 ? `\nタイミー総支給額: ${shift.timeeFixedPay}円` : ""
-      }${
         shift.memo ? `\nメモ: ${shift.memo}` : ""
       }`
     );
@@ -2911,8 +2982,6 @@
       "時給",
       "交通費",
       "タイミー案件",
-      "タイミー案件ID",
-      "タイミー総支給額",
       "勤務ステータス",
       "メモ",
       "労働時間(時間)",
@@ -2937,8 +3006,6 @@
         row.result.hourlyRate,
         row.result.transport,
         row.shift.timeeEnabled ? "はい" : "いいえ",
-        row.shift.timeeJobId || "",
-        row.shift.timeeFixedPay || 0,
         getShiftStatusLabel(normalizeShiftStatus(row.shift.shiftStatus)),
         row.shift.memo || "",
         (row.result.workedMinutes / 60).toFixed(2),
@@ -3425,6 +3492,16 @@
   }
 
   function resolveCompensationForShift(dateKey, shift, preResolvedMaster) {
+    if (shift && shift.timeeEnabled) {
+      const timeeHourlyRate = toPositiveNumber(shift.hourlyRate, 0);
+      if (timeeHourlyRate > 0) {
+        return {
+          hourlyRate: timeeHourlyRate,
+          transport: toNonNegativeNumber(shift.transport, 0)
+        };
+      }
+    }
+
     const master = preResolvedMaster || getMasterById(shift.workplaceMasterId) || findMasterByName(shift.workplace);
     if (master) {
       const payRate = resolveMasterPayRateForDate(master, dateKey);
@@ -3461,14 +3538,24 @@
   }
 
   function syncTimeeModeByWorkplace() {
+    const wasEnabled = Boolean(refs.timeeEnabled.checked);
     const master = getMasterById(refs.workplaceMaster.value);
     const fromMaster = master ? master.name : "";
     const fromInput = refs.workplace.value;
-    const enabled = isTimeeWorkplaceName(fromMaster) || isTimeeWorkplaceName(fromInput);
+    const masterIsTimee = isTimeeWorkplaceName(fromMaster);
+    const enabled = masterIsTimee || isTimeeWorkplaceName(fromInput);
     refs.timeeEnabled.checked = enabled;
-    if (!enabled) {
-      refs.timeeJobId.value = "";
-      refs.timeeFixedPay.value = "";
+
+    if (enabled) {
+      refs.workplace.placeholder = "例: 渋谷カフェ（案件先）";
+      if (masterIsTimee && isTimeeWorkplaceName(refs.workplace.value)) {
+        refs.workplace.value = "";
+      }
+      if (!wasEnabled || !refs.hourlyRate.value) {
+        applyCompensationToFormFromSelection();
+      }
+    } else {
+      refs.workplace.placeholder = "例: カフェA";
     }
     renderTimeeInputState();
   }
