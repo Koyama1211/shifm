@@ -74,6 +74,13 @@
               </div>
             </div>
             <div id="calendarGrid" class="calendar-grid" aria-live="polite"></div>
+            <div class="day-list-wrap under-calendar">
+              <div class="day-list-head">
+                <h4>選択日のシフト</h4>
+                <p id="selectedDayShiftsLabel" class="section-note">日付を選択してください</p>
+              </div>
+              <ul id="dayShiftList" class="day-shift-list"></ul>
+            </div>
           </section>
 
           <section class="panel form-panel">
@@ -81,6 +88,7 @@
             <p id="editingStatus" class="editing-status">新規シフトを入力中</p>
             <form id="shiftForm">
               <input id="editingShiftId" name="editingShiftId" type="hidden" />
+              <h4 class="form-section-title">基本入力</h4>
               <div class="field-row split">
                 <div>
                   <label for="workplaceMaster">勤務先マスタ</label>
@@ -97,20 +105,23 @@
                 <input id="workplace" name="workplace" type="text" placeholder="例: カフェA" list="workplaceSuggestions" />
                 <datalist id="workplaceSuggestions"></datalist>
               </div>
-              <div class="field-row split">
-                <div>
-                  <label for="shiftLine">ライン</label>
-                  <select id="shiftLine" name="shiftLine">
-                    <option value="">未選択</option>
-                  </select>
+              <details class="advanced-block compact-block">
+                <summary>勤務パターン（任意）</summary>
+                <div class="field-row split">
+                  <div>
+                    <label for="shiftLine">ライン</label>
+                    <select id="shiftLine" name="shiftLine">
+                      <option value="">未選択</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="shiftPattern">シフトパターン</label>
+                    <select id="shiftPattern" name="shiftPattern">
+                      <option value="">未選択</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label for="shiftPattern">シフトパターン</label>
-                  <select id="shiftPattern" name="shiftPattern">
-                    <option value="">未選択</option>
-                  </select>
-                </div>
-              </div>
+              </details>
               <div class="field-row split">
                 <div>
                   <label for="startTime">開始</label>
@@ -126,12 +137,12 @@
                   <label for="breakMinutes">休憩(分)</label>
                   <input id="breakMinutes" name="breakMinutes" type="number" min="0" step="1" value="0" />
                 </div>
-                <div>
+                <div id="hourlyRateGroup">
                   <label for="hourlyRate">時給(円)</label>
                   <input id="hourlyRate" name="hourlyRate" type="number" min="0" step="1" required />
                 </div>
               </div>
-              <div class="field-row">
+              <div id="transportGroup" class="field-row">
                 <label for="transport">交通費(円)</label>
                 <input id="transport" name="transport" type="number" min="0" step="1" value="0" />
               </div>
@@ -157,109 +168,101 @@
                     <input id="timeeFixedPay" name="timeeFixedPay" type="number" min="0" step="1" />
                   </div>
                 </div>
-                <p class="section-note">総支給額を入力すると、給与計算はその金額を優先します。</p>
+                <p class="section-note">タイミー案件では総支給額を入力してください（時給計算より優先）。</p>
               </details>
               <div class="actions">
                 <button type="submit" class="primary">保存</button>
                 <button id="newShift" type="button">新規入力</button>
                 <button id="deleteShift" type="button" class="danger">削除</button>
               </div>
-              <details class="advanced-block">
-                <summary>詳細操作（連携・補助）</summary>
-                <div class="actions advanced-actions">
-                  <button id="saveAsMaster" type="button">勤務先マスタに保存</button>
-                  <button id="addGoogleCalendar" type="button">Google Calendar登録</button>
-                  <button id="addDayGoogleCalendar" type="button">当日分をGoogle登録</button>
-                </div>
-              </details>
-
-              <details class="advanced-block">
-                <summary>定型シフト一括登録（週次）</summary>
-                <div id="bulkShiftForm" class="sub-form">
-                  <div class="field-row split">
-                    <div>
-                      <label for="bulkWorkplaceMaster">勤務先マスタ</label>
-                      <select id="bulkWorkplaceMaster" name="bulkWorkplaceMaster">
-                        <option value="">未選択</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label for="bulkWorkplace">勤務先</label>
-                      <input id="bulkWorkplace" name="bulkWorkplace" type="text" placeholder="例: カフェA" />
-                    </div>
-                  </div>
-
-                  <div class="field-row split">
-                    <div>
-                      <label for="bulkStartTime">開始</label>
-                      <input id="bulkStartTime" name="bulkStartTime" type="time" />
-                    </div>
-                    <div>
-                      <label for="bulkEndTime">終了</label>
-                      <input id="bulkEndTime" name="bulkEndTime" type="time" />
-                    </div>
-                  </div>
-
-                  <div class="field-row split">
-                    <div>
-                      <label for="bulkBreakMinutes">休憩(分)</label>
-                      <input id="bulkBreakMinutes" name="bulkBreakMinutes" type="number" min="0" step="1" value="0" />
-                    </div>
-                    <div>
-                      <label for="bulkHourlyRate">時給(円)</label>
-                      <input id="bulkHourlyRate" name="bulkHourlyRate" type="number" min="0" step="1" />
-                    </div>
-                  </div>
-
-                  <div class="field-row">
-                    <label for="bulkTransport">交通費(円)</label>
-                    <input id="bulkTransport" name="bulkTransport" type="number" min="0" step="1" value="0" />
-                  </div>
-
-                  <div class="field-row">
-                    <label>曜日選択</label>
-                    <div class="weekday-checks">
-                      <label><input type="checkbox" name="bulkWeekday" value="0" />日</label>
-                      <label><input type="checkbox" name="bulkWeekday" value="1" checked />月</label>
-                      <label><input type="checkbox" name="bulkWeekday" value="2" />火</label>
-                      <label><input type="checkbox" name="bulkWeekday" value="3" checked />水</label>
-                      <label><input type="checkbox" name="bulkWeekday" value="4" />木</label>
-                      <label><input type="checkbox" name="bulkWeekday" value="5" checked />金</label>
-                      <label><input type="checkbox" name="bulkWeekday" value="6" />土</label>
-                    </div>
-                  </div>
-
-                  <div class="field-row split">
-                    <div>
-                      <label for="bulkStartDate">開始日</label>
-                      <input id="bulkStartDate" name="bulkStartDate" type="date" />
-                    </div>
-                    <div>
-                      <label for="bulkEndDate">終了日</label>
-                      <input id="bulkEndDate" name="bulkEndDate" type="date" />
-                    </div>
-                  </div>
-
-                  <div class="field-row">
-                    <label>
-                      <input id="bulkSkipExisting" name="bulkSkipExisting" type="checkbox" checked />
-                      同一シフト（勤務先・開始終了時刻）が既にある日は追加しない
-                    </label>
-                  </div>
-
-                  <div class="actions">
-                    <button id="applyBulkShift" type="button" class="primary">一括登録</button>
-                  </div>
-                  <p id="bulkShiftStatus" class="section-note"></p>
-                </div>
-              </details>
             </form>
-            <div class="day-list-wrap">
-              <div class="day-list-head">
-                <h4>この日のシフト</h4>
+            <details class="advanced-block low-frequency-block">
+              <summary>補助機能（低頻度）</summary>
+              <div class="actions advanced-actions">
+                <button id="saveAsMaster" type="button">勤務先マスタに保存</button>
+                <button id="addGoogleCalendar" type="button">Google Calendar登録</button>
+                <button id="addDayGoogleCalendar" type="button">当日分をGoogle登録</button>
               </div>
-              <ul id="dayShiftList" class="day-shift-list"></ul>
-            </div>
+              <div class="advanced-divider"></div>
+              <div id="bulkShiftForm" class="sub-form">
+                <h4 class="form-section-title">定型シフト一括登録（週次）</h4>
+                <div class="field-row split">
+                  <div>
+                    <label for="bulkWorkplaceMaster">勤務先マスタ</label>
+                    <select id="bulkWorkplaceMaster" name="bulkWorkplaceMaster">
+                      <option value="">未選択</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="bulkWorkplace">勤務先</label>
+                    <input id="bulkWorkplace" name="bulkWorkplace" type="text" placeholder="例: カフェA" />
+                  </div>
+                </div>
+
+                <div class="field-row split">
+                  <div>
+                    <label for="bulkStartTime">開始</label>
+                    <input id="bulkStartTime" name="bulkStartTime" type="time" />
+                  </div>
+                  <div>
+                    <label for="bulkEndTime">終了</label>
+                    <input id="bulkEndTime" name="bulkEndTime" type="time" />
+                  </div>
+                </div>
+
+                <div class="field-row split">
+                  <div>
+                    <label for="bulkBreakMinutes">休憩(分)</label>
+                    <input id="bulkBreakMinutes" name="bulkBreakMinutes" type="number" min="0" step="1" value="0" />
+                  </div>
+                  <div>
+                    <label for="bulkHourlyRate">時給(円)</label>
+                    <input id="bulkHourlyRate" name="bulkHourlyRate" type="number" min="0" step="1" />
+                  </div>
+                </div>
+
+                <div class="field-row">
+                  <label for="bulkTransport">交通費(円)</label>
+                  <input id="bulkTransport" name="bulkTransport" type="number" min="0" step="1" value="0" />
+                </div>
+
+                <div class="field-row">
+                  <label>曜日選択</label>
+                  <div class="weekday-checks">
+                    <label><input type="checkbox" name="bulkWeekday" value="0" />日</label>
+                    <label><input type="checkbox" name="bulkWeekday" value="1" checked />月</label>
+                    <label><input type="checkbox" name="bulkWeekday" value="2" />火</label>
+                    <label><input type="checkbox" name="bulkWeekday" value="3" checked />水</label>
+                    <label><input type="checkbox" name="bulkWeekday" value="4" />木</label>
+                    <label><input type="checkbox" name="bulkWeekday" value="5" checked />金</label>
+                    <label><input type="checkbox" name="bulkWeekday" value="6" />土</label>
+                  </div>
+                </div>
+
+                <div class="field-row split">
+                  <div>
+                    <label for="bulkStartDate">開始日</label>
+                    <input id="bulkStartDate" name="bulkStartDate" type="date" />
+                  </div>
+                  <div>
+                    <label for="bulkEndDate">終了日</label>
+                    <input id="bulkEndDate" name="bulkEndDate" type="date" />
+                  </div>
+                </div>
+
+                <div class="field-row">
+                  <label>
+                    <input id="bulkSkipExisting" name="bulkSkipExisting" type="checkbox" checked />
+                    同一シフト（勤務先・開始終了時刻）が既にある日は追加しない
+                  </label>
+                </div>
+
+                <div class="actions">
+                  <button id="applyBulkShift" type="button" class="primary">一括登録</button>
+                </div>
+                <p id="bulkShiftStatus" class="section-note"></p>
+              </div>
+            </details>
           </section>
         </div>
       </section>
@@ -444,20 +447,19 @@
       <section class="view-section" data-view="sync">
         <section class="panel sync-panel">
           <h3>端末同期 (GitHub Gist)</h3>
-          <p class="section-note">通常は「クラウドへ保存」「クラウドから取得」だけ使えば十分です。</p>
-          <div class="actions">
-            <button id="exportBackup" type="button">バックアップ書き出し</button>
-            <button id="importBackup" type="button">バックアップ読み込み</button>
-          </div>
-          <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
-          <p class="section-note">GitHub設定なしで使う場合は、この2ボタンで端末間移行できます。</p>
+          <p class="section-note">通常運用は「クラウドへ保存」「クラウドから取得」だけで完結します。</p>
           <div class="actions">
             <button id="pushCloud" type="button">クラウドへ保存</button>
             <button id="pullCloud" type="button">クラウドから取得</button>
           </div>
           <p id="syncStatus">同期未設定</p>
           <details class="advanced-block">
-            <summary>同期詳細設定（Token/Gist/差分マージ）</summary>
+            <summary>同期詳細設定（低頻度）</summary>
+            <div class="actions advanced-actions">
+              <button id="exportBackup" type="button">バックアップ書き出し</button>
+              <button id="importBackup" type="button">バックアップ読み込み</button>
+            </div>
+            <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
             <form id="syncForm">
               <div class="field-row">
                 <label for="githubToken">GitHub Personal Access Token</label>

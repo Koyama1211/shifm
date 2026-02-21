@@ -72,6 +72,7 @@
     summaryMasterFilter: document.getElementById("summaryMasterFilter"),
 
     selectedDateLabel: document.getElementById("selectedDateLabel"),
+    selectedDayShiftsLabel: document.getElementById("selectedDayShiftsLabel"),
     editingStatus: document.getElementById("editingStatus"),
     shiftForm: document.getElementById("shiftForm"),
     editingShiftId: document.getElementById("editingShiftId"),
@@ -85,7 +86,9 @@
     endTime: document.getElementById("endTime"),
     breakMinutes: document.getElementById("breakMinutes"),
     hourlyRate: document.getElementById("hourlyRate"),
+    hourlyRateGroup: document.getElementById("hourlyRateGroup"),
     transport: document.getElementById("transport"),
+    transportGroup: document.getElementById("transportGroup"),
     memo: document.getElementById("memo"),
     timeeEnabled: document.getElementById("timeeEnabled"),
     timeeJobId: document.getElementById("timeeJobId"),
@@ -820,11 +823,13 @@
 
   function renderDayShiftList() {
     refs.dayShiftList.innerHTML = "";
+    refs.selectedDayShiftsLabel.textContent = selectedDate ? `${selectedDate} を表示中` : "日付を選択してください";
     if (!selectedDate) {
       return;
     }
 
     const dayShifts = getDayShifts(selectedDate);
+    refs.selectedDayShiftsLabel.textContent = `${selectedDate} / ${dayShifts.length}件`;
     if (dayShifts.length === 0) {
       const empty = document.createElement("li");
       empty.className = "day-shift-item";
@@ -1060,6 +1065,10 @@
     const enabled = Boolean(refs.timeeEnabled.checked);
     refs.timeeJobId.disabled = !enabled;
     refs.timeeFixedPay.disabled = !enabled;
+    refs.hourlyRate.disabled = enabled;
+    refs.transport.disabled = enabled;
+    refs.hourlyRateGroup.hidden = enabled;
+    refs.transportGroup.hidden = enabled;
   }
 
   function getMasterPatterns(master) {
@@ -1537,6 +1546,10 @@
 
     if (!isValidTime(shift.startTime) || !isValidTime(shift.endTime)) {
       throw new Error("開始時刻/終了時刻を正しく入力してください。");
+    }
+
+    if (shift.timeeEnabled && shift.timeeFixedPay <= 0) {
+      throw new Error("タイミー案件では総支給額(円)を入力してください。");
     }
 
     if (shift.hourlyRate <= 0) {

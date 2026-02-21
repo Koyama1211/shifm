@@ -263,6 +263,11 @@ h3 {
   font-size: 0.83rem;
 }
 
+.form-section-title {
+  margin: 2px 0 0;
+  font-size: 0.94rem;
+}
+
 form {
   display: grid;
   gap: 10px;
@@ -385,8 +390,22 @@ button {
   font-size: 0.88rem;
 }
 
+.compact-block {
+  margin-top: 4px;
+}
+
 .advanced-actions {
   margin-top: 10px;
+}
+
+.low-frequency-block {
+  margin-top: 12px;
+}
+
+.advanced-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 12px 0 10px;
 }
 
 .sub-form {
@@ -418,6 +437,10 @@ button {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.74);
   padding: 10px;
+}
+
+.under-calendar {
+  margin-top: 12px;
 }
 
 .day-list-head {
