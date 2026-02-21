@@ -43,6 +43,19 @@
             <button id="authToggleMode" type="button">新規登録に切替</button>
           </div>
         </form>
+        <details class="advanced-block">
+          <summary>ログイン情報を別ブラウザへ移行</summary>
+          <p class="section-note">登録済み端末で復元コードを生成し、新しい端末で適用してください。</p>
+          <div class="field-row">
+            <label for="authTransferCode">認証復元コード</label>
+            <textarea id="authTransferCode" name="authTransferCode" rows="3" placeholder="ここに復元コードを貼り付け"></textarea>
+          </div>
+          <div class="actions">
+            <button id="generateAuthTransfer" type="button">復元コード生成</button>
+            <button id="applyAuthTransfer" type="button">復元コード適用</button>
+          </div>
+          <p class="section-note">他人に共有しないでください。</p>
+        </details>
       </div>
     </section>
 

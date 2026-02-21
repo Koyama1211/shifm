@@ -59,6 +59,9 @@
     authStatus: document.getElementById("authStatus"),
     authSubmit: document.getElementById("authSubmit"),
     authToggleMode: document.getElementById("authToggleMode"),
+    authTransferCode: document.getElementById("authTransferCode"),
+    generateAuthTransfer: document.getElementById("generateAuthTransfer"),
+    applyAuthTransfer: document.getElementById("applyAuthTransfer"),
     currentUserLabel: document.getElementById("currentUserLabel"),
     logoutButton: document.getElementById("logoutButton"),
     viewTabs: Array.from(document.querySelectorAll(".view-tab")),
@@ -201,6 +204,14 @@
       setAuthStatus("");
       renderAuthView();
     });
+
+    refs.generateAuthTransfer.addEventListener("click", async () => {
+      await generateAuthTransferCode();
+    });
+
+    refs.applyAuthTransfer.addEventListener("click", () => {
+      applyAuthTransferCode();
+    });
   }
 
   async function submitAuth() {
@@ -245,7 +256,7 @@
     }
 
     if (!authProfile) {
-      setAuthStatus("このブラウザには登録情報がありません。新規登録に切り替えるか、登録済みブラウザを使用してください。");
+      setAuthStatus("このブラウザには登録情報がありません。新規登録するか、認証復元コードを適用してください。");
       return;
     }
 
@@ -280,6 +291,74 @@
 
     if (authProfile && authProfile.userId && isLogin) {
       refs.authUserId.value = authProfile.userId;
+    }
+  }
+
+  async function generateAuthTransferCode() {
+    if (!authProfile) {
+      setAuthStatus("先に新規登録またはログインを完了してください。");
+      return;
+    }
+
+    const payload = {
+      version: 1,
+      kind: "auth_transfer",
+      updatedAt: new Date().toISOString(),
+      profile: authProfile
+    };
+    const code = encodeBase64Url(JSON.stringify(payload));
+    refs.authTransferCode.value = code;
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(code);
+        setAuthStatus("認証復元コードを生成し、クリップボードにコピーしました。");
+      } else {
+        setAuthStatus("認証復元コードを生成しました。");
+      }
+    } catch (error) {
+      setAuthStatus("認証復元コードを生成しました。");
+    }
+  }
+
+  function applyAuthTransferCode() {
+    const rawCode = refs.authTransferCode.value.trim();
+    if (!rawCode) {
+      alert("認証復元コードを貼り付けてください。");
+      return;
+    }
+
+    try {
+      const decoded = decodeBase64Url(rawCode);
+      const parsed = JSON.parse(decoded);
+      const profile = normalizeAuthProfileObject(
+        isObject(parsed) && isObject(parsed.profile) ? parsed.profile : parsed
+      );
+      if (!profile) {
+        throw new Error("認証復元コードが不正です。");
+      }
+
+      if (
+        authProfile &&
+        (authProfile.userId !== profile.userId || authProfile.passwordHash !== profile.passwordHash) &&
+        !window.confirm("既存のログイン情報を上書きしますか？")
+      ) {
+        return;
+      }
+
+      authProfile = profile;
+      persistAuthProfile(authProfile);
+      authMode = "login";
+      authenticatedUserId = "";
+      refs.authUserId.value = authProfile.userId;
+      refs.authPassword.value = "";
+      refs.authPasswordConfirm.value = "";
+      renderAuthView();
+      setAuthStatus("認証情報を復元しました。ログインしてください。");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "認証復元コードの適用に失敗しました。";
+      alert(message);
+      setAuthStatus(message);
     }
   }
 
@@ -2930,29 +3009,33 @@
         return null;
       }
       const parsed = JSON.parse(raw);
-      if (!isObject(parsed)) {
-        return null;
-      }
-      if (
-        typeof parsed.userId !== "string" ||
-        !parsed.userId.trim() ||
-        typeof parsed.salt !== "string" ||
-        !parsed.salt ||
-        typeof parsed.passwordHash !== "string" ||
-        !parsed.passwordHash
-      ) {
-        return null;
-      }
-      return {
-        version: 1,
-        userId: parsed.userId.trim(),
-        salt: parsed.salt,
-        passwordHash: parsed.passwordHash,
-        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : ""
-      };
+      return normalizeAuthProfileObject(parsed);
     } catch (error) {
       return null;
     }
+  }
+
+  function normalizeAuthProfileObject(value) {
+    if (!isObject(value)) {
+      return null;
+    }
+    if (
+      typeof value.userId !== "string" ||
+      !value.userId.trim() ||
+      typeof value.salt !== "string" ||
+      !value.salt ||
+      typeof value.passwordHash !== "string" ||
+      !value.passwordHash
+    ) {
+      return null;
+    }
+    return {
+      version: 1,
+      userId: value.userId.trim(),
+      salt: value.salt,
+      passwordHash: value.passwordHash,
+      updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : ""
+    };
   }
 
   function persistAuthProfile(profile) {
