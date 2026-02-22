@@ -1,4 +1,4 @@
-const CACHE_NAME = "shifm-static-v3";
+const CACHE_NAME = "shifm-static-v5";
 const STATIC_ASSETS = [
   "./",
   "./index.html",

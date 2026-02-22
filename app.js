@@ -4104,16 +4104,16 @@
     container.className = "particle-burst";
     container.style.left = x + "px";
     container.style.top = y + "px";
-    var colors = ["#5ae6c5", "#7cc8f0", "#b8a4f8", "#f0a0c8", "#f0d060"];
-    for (var i = 0; i < 18; i++) {
+    var colors = ["#2563eb", "#60a5fa", "#93c5fd", "#a78bfa", "#34d399"];
+    for (var i = 0; i < 10; i++) {
       var p = document.createElement("div");
       p.className = "particle";
-      var angle = (Math.PI * 2 * i) / 18 + (Math.random() - 0.5) * 0.5;
-      var dist = 40 + Math.random() * 60;
+      var angle = (Math.PI * 2 * i) / 10 + (Math.random() - 0.5) * 0.5;
+      var dist = 30 + Math.random() * 40;
       p.style.setProperty("--px", Math.cos(angle) * dist + "px");
       p.style.setProperty("--py", Math.sin(angle) * dist + "px");
       p.style.background = colors[i % colors.length];
-      p.style.boxShadow = "0 0 6px " + colors[i % colors.length];
+      p.style.boxShadow = "none";
       container.appendChild(p);
     }
     document.body.appendChild(container);
@@ -4235,12 +4235,6 @@
       var btn = e.target.closest("button");
       if (btn) addRipple(e);
     });
-
-    // Calendar glow
-    initCalendarGlow();
-
-    // Background particles
-    initBackgroundParticles();
 
     // Nav indicator
     updateNavIndicator();
