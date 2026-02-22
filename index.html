@@ -87,16 +87,17 @@
               </div>
             </div>
             <div id="calendarGrid" class="calendar-grid" aria-live="polite"></div>
-            <div class="day-list-wrap under-calendar">
-              <div class="day-list-head">
-                <h4>選択日のシフト</h4>
-                <p id="selectedDayShiftsLabel" class="section-note">日付を選択してください</p>
+            <div id="halfModal" class="half-modal">
+              <div class="half-modal-handle" id="halfModalHandle"><span></span></div>
+              <div class="half-modal-content">
+                <div class="day-list-head">
+                  <h4 id="halfModalTitle">選択日のシフト</h4>
+                  <p id="selectedDayShiftsLabel" class="section-note">日付を選択してください</p>
+                </div>
+                <ul id="dayShiftList" class="day-shift-list"></ul>
               </div>
-              <div class="actions inline-actions">
-                <button id="jumpToForm" type="button">この日の入力へ移動</button>
-              </div>
-              <ul id="dayShiftList" class="day-shift-list"></ul>
             </div>
+            <button id="jumpToForm" type="button" class="fab" aria-label="シフト入力へ移動">＋</button>
           </section>
 
           <section id="shiftFormPanel" class="panel form-panel">

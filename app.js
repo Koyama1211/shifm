@@ -928,22 +928,23 @@
       cell.appendChild(number);
 
       if (dayShifts.length > 0) {
-        const count = document.createElement("div");
-        count.className = "day-count";
-        count.textContent = `${dayShifts.length}`;
-        cell.appendChild(count);
-
+        const dotRow = document.createElement("div");
+        dotRow.className = "day-dots";
         const summary = summarizeDayStatus(dayKey, dayShifts);
-        const status = document.createElement("div");
-        status.className = `day-status day-status-dot ${summary.className}`;
-        status.title = summary.label;
-        status.setAttribute("aria-label", summary.label);
-        cell.appendChild(status);
-
-        const pay = document.createElement("div");
-        pay.className = "day-pay";
-        pay.textContent = formatCurrency(grossTotal);
-        cell.appendChild(pay);
+        for (let d = 0; d < Math.min(dayShifts.length, 3); d++) {
+          const dot = document.createElement("span");
+          dot.className = `day-dot ${summary.className}`;
+          dotRow.appendChild(dot);
+        }
+        if (dayShifts.length > 3) {
+          const more = document.createElement("span");
+          more.className = "day-dot-more";
+          more.textContent = "+";
+          dotRow.appendChild(more);
+        }
+        dotRow.title = `${dayShifts.length}件 / ${formatCurrency(grossTotal)}`;
+        dotRow.setAttribute("aria-label", `${summary.label} ${dayShifts.length}件`);
+        cell.appendChild(dotRow);
       }
 
       cell.addEventListener("click", () => {
@@ -1004,9 +1005,14 @@
   function renderDayShiftList() {
     refs.dayShiftList.innerHTML = "";
     refs.selectedDayShiftsLabel.textContent = selectedDate ? `${selectedDate} を表示中` : "日付を選択してください";
+    var halfModal = document.getElementById("halfModal");
+    var halfModalTitle = document.getElementById("halfModalTitle");
     if (!selectedDate) {
+      if (halfModal) halfModal.classList.remove("is-open");
       return;
     }
+    if (halfModal) halfModal.classList.add("is-open");
+    if (halfModalTitle) halfModalTitle.textContent = `${selectedDate} のシフト`;
 
     const dayShifts = getDayShifts(selectedDate);
     refs.selectedDayShiftsLabel.textContent = `${selectedDate} / ${dayShifts.length}件`;
@@ -4098,7 +4104,7 @@
     container.className = "particle-burst";
     container.style.left = x + "px";
     container.style.top = y + "px";
-    var colors = ["#00ffc8", "#38bdf8", "#a78bfa", "#f472b6", "#fbbf24"];
+    var colors = ["#5ae6c5", "#7cc8f0", "#b8a4f8", "#f0a0c8", "#f0d060"];
     for (var i = 0; i < 18; i++) {
       var p = document.createElement("div");
       p.className = "particle";
@@ -4188,7 +4194,7 @@
         if (p.y > canvas.height) p.y = 0;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(0, 255, 200, " + p.alpha + ")";
+        ctx.fillStyle = "rgba(90, 230, 197, " + p.alpha + ")";
         ctx.fill();
       }
 
@@ -4202,7 +4208,7 @@
             ctx.beginPath();
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = "rgba(0, 255, 200, " + (0.06 * (1 - dist / 120)) + ")";
+            ctx.strokeStyle = "rgba(90, 230, 197, " + (0.04 * (1 - dist / 120)) + ")";
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }
