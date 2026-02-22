@@ -734,7 +734,7 @@
       deleteSelectedPattern();
     });
 
-    refs.addMonthlyGoogleCalendar.addEventListener("click", () => {
+    refs.addMonthlyGoogleCalendar.addEventListener("click", async () => {
       const filterMasterId = normalizeSummaryMasterFilter(summaryMasterFilter);
       const allRows = getCurrentMonthRows();
       const monthRows =
@@ -747,16 +747,20 @@
         return;
       }
 
-      let opened = 0;
-      for (const row of monthRows) {
-        const win = openGoogleCalendarEvent(row.dateKey, row.shift, true);
-        if (win) {
-          opened += 1;
-        }
+      if (!confirm(`${monthRows.length}件のシフトを順次Googleカレンダーで開きます。各ウィンドウで「保存」を押して閉じてください。\n\n※ブラウザのポップアップブロックが解除されている必要があります。`)) {
+        return;
       }
 
-      if (opened < monthRows.length) {
-        alert("ポップアップ制限により一部開けませんでした。ブラウザ設定で許可してください。");
+      for (let i = 0; i < monthRows.length; i++) {
+        const row = monthRows[i];
+        openGoogleCalendarEvent(row.dateKey, row.shift);
+        
+        if (i < monthRows.length - 1) {
+          const next = confirm(`[${i + 1} / ${monthRows.length}] を開きました。カレンダーで保存後、OKを押して次（${monthRows[i+1].dateKey}）を開きますか？`);
+          if (!next) break;
+        } else {
+          alert("すべてのシフトを開き終わりました。");
+        }
       }
     });
 
