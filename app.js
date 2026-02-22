@@ -171,6 +171,7 @@
     payrollList: document.getElementById("payrollList"),
     monthlyRows: document.getElementById("monthlyRows"),
     workplaceSummaryRows: document.getElementById("workplaceSummaryRows"),
+    addMonthlyGoogleCalendar: document.getElementById("addMonthlyGoogleCalendar"),
     exportCsv: document.getElementById("exportCsv"),
 
     exportBackup: document.getElementById("exportBackup"),
@@ -731,6 +732,32 @@
 
     refs.patternDelete.addEventListener("click", () => {
       deleteSelectedPattern();
+    });
+
+    refs.addMonthlyGoogleCalendar.addEventListener("click", () => {
+      const filterMasterId = normalizeSummaryMasterFilter(summaryMasterFilter);
+      const allRows = getCurrentMonthRows();
+      const monthRows =
+        filterMasterId === "all"
+          ? allRows
+          : allRows.filter((row) => resolveMasterIdForShift(row.shift) === filterMasterId);
+
+      if (monthRows.length === 0) {
+        alert("この月のシフトがありません。");
+        return;
+      }
+
+      let opened = 0;
+      for (const row of monthRows) {
+        const win = openGoogleCalendarEvent(row.dateKey, row.shift, true);
+        if (win) {
+          opened += 1;
+        }
+      }
+
+      if (opened < monthRows.length) {
+        alert("ポップアップ制限により一部開けませんでした。ブラウザ設定で許可してください。");
+      }
     });
 
     refs.exportCsv.addEventListener("click", () => {
