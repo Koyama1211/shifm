@@ -183,6 +183,8 @@
 
   init().catch((error) => {
     console.error(error);
+  }).finally(() => {
+    initVisualEffects();
   });
 
   async function init() {
@@ -373,7 +375,7 @@
       if (supabaseClient) {
         const { error } = await supabaseClient.auth.signOut();
         if (error) {
-          alert(`ログアウトに失敗しました: ${error.message}`);
+          showToast(`ログアウトに失敗しました: ${error.message}`, "error");
           return;
         }
       }
@@ -401,7 +403,7 @@
 
     refs.jumpToForm.addEventListener("click", () => {
       if (!selectedDate) {
-        alert("先に日付を選択してください。");
+        showToast("先に日付を選択してください。", "error");
         return;
       }
       setMobileShiftPane("form");
@@ -535,7 +537,7 @@
     refs.shiftForm.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!selectedDate) {
-        alert("先に日付を選択してください。");
+        showToast("先に日付を選択してください。", "error");
         return;
       }
       if (typeof refs.shiftForm.reportValidity === "function" && !refs.shiftForm.reportValidity()) {
@@ -546,7 +548,7 @@
       try {
         shift = buildShiftFromForm();
       } catch (error) {
-        alert(error.message);
+        showToast(error.message, "error");
         return;
       }
 
@@ -572,7 +574,12 @@
       renderWorkplaceSuggestions();
       renderSummary();
       queueAutoSync("シフト保存");
-      alert("シフトを保存しました。");
+      showToast("シフトを保存しました。", "success");
+      var _saveBtn = event.target.querySelector("button[type=submit], .primary") || event.target;
+      if (_saveBtn) {
+        var _r = _saveBtn.getBoundingClientRect ? _saveBtn.getBoundingClientRect() : null;
+        if (_r) emitParticleBurst(_r.left + _r.width / 2, _r.top + _r.height / 2);
+      }
     });
 
     refs.newShift.addEventListener("click", () => {
@@ -598,7 +605,7 @@
       }
 
       if (!selectedShiftId) {
-        alert("削除するシフトを一覧から選択してください。");
+        showToast("削除するシフトを一覧から選択してください。", "error");
         return;
       }
 
@@ -629,7 +636,7 @@
 
     refs.addGoogleCalendar.addEventListener("click", () => {
       if (!selectedDate) {
-        alert("先に日付を選択してください。");
+        showToast("先に日付を選択してください。", "error");
         return;
       }
 
@@ -637,7 +644,7 @@
       try {
         shift = buildShiftFromForm();
       } catch (error) {
-        alert(error.message);
+        showToast(error.message, "error");
         return;
       }
 
@@ -650,7 +657,7 @@
       }
       const dayShifts = getDayShifts(selectedDate);
       if (dayShifts.length === 0) {
-        alert("この日の登録シフトがありません。");
+        showToast("この日の登録シフトがありません。", "error");
         return;
       }
 
@@ -663,7 +670,7 @@
       }
 
       if (opened < dayShifts.length) {
-        alert("ポップアップ制限により一部開けませんでした。ブラウザ設定で許可してください。");
+        showToast("ポップアップ制限により一部開けませんでした。", "error");
       }
     });
 
@@ -684,7 +691,7 @@
       renderCalendar();
       renderSummary();
       queueAutoSync("設定保存");
-      alert("給与設定を保存しました。");
+      showToast("給与設定を保存しました。", "success");
     });
 
     refs.masterForm.addEventListener("submit", (event) => {
@@ -737,7 +744,7 @@
     refs.exportCsv.addEventListener("click", () => {
       const monthRows = getCurrentMonthRows();
       if (monthRows.length === 0) {
-        alert("この月のシフトがありません。");
+        showToast("この月のシフトがありません。", "error");
         return;
       }
       exportMonthlyCsv(monthRows);
@@ -803,6 +810,7 @@
     }
 
     renderShiftPaneState();
+    if (typeof updateNavIndicator === "function") updateNavIndicator();
   }
 
   function renderShiftPaneState() {
@@ -1392,7 +1400,7 @@
   function savePatternFromForm() {
     const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
     if (!master) {
-      alert("先に勤務先マスタを選択してください。");
+      showToast("先に勤務先マスタを選択してください。", "error");
       return;
     }
 
@@ -1404,11 +1412,11 @@
     const breakMinutes = toNonNegativeNumber(refs.patternBreakMinutes.value, 0);
 
     if (!name) {
-      alert("パターン名を入力してください。");
+      showToast("パターン名を入力してください。", "error");
       return;
     }
     if (!isValidTime(startTime) || !isValidTime(endTime)) {
-      alert("開始時刻/終了時刻を正しく入力してください。");
+      showToast("開始時刻/終了時刻を正しく入力してください。", "error");
       return;
     }
 
@@ -1424,7 +1432,7 @@
       0
     );
     if (!pattern) {
-      alert("シフトパターンの入力内容を確認してください。");
+      showToast("シフトパターンの入力内容を確認してください。", "error");
       return;
     }
 
@@ -1444,7 +1452,7 @@
     renderPatternList();
     renderShiftPatternControls();
     queueAutoSync("シフトパターン保存");
-    alert("シフトパターンを保存しました。");
+    showToast("シフトパターンを保存しました。", "success");
   }
 
   function deleteSelectedPattern() {
@@ -1615,19 +1623,19 @@
   function savePayrollFromForm() {
     const monthKey = normalizeMonthKeyInput(refs.payrollMonth.value);
     if (!monthKey) {
-      alert("対象月を入力してください。");
+      showToast("対象月を入力してください。", "error");
       return;
     }
 
     const workplaceMasterId = refs.payrollWorkplaceMaster.value;
     if (!workplaceMasterId || (!getMasterById(workplaceMasterId) && !isTimeeMasterOptionId(workplaceMasterId))) {
-      alert("勤務先マスタを選択してください。");
+      showToast("勤務先マスタを選択してください。", "error");
       return;
     }
 
     const amount = toNonNegativeNumber(refs.payrollAmount.value, 0);
     if (amount <= 0) {
-      alert("支払実績額を入力してください。");
+      showToast("支払実績額を入力してください。", "error");
       return;
     }
 
@@ -1654,7 +1662,7 @@
     renderDayShiftList();
     renderSummary();
     queueAutoSync("給与実績保存");
-    alert("給与実績を保存しました。関連シフトを自動で支払済みに反映しました。");
+    showToast("給与実績を保存しました。関連シフトを自動で支払済みに反映しました。", "success");
   }
 
   function deletePayrollRecord(recordId) {
@@ -2145,7 +2153,7 @@
       payload = buildBulkShiftPayloadFromForm();
     } catch (error) {
       setBulkStatus(error.message);
-      alert(error.message);
+      showToast(error.message, "error");
       return;
     }
 
@@ -2188,7 +2196,7 @@
 
     const message = `対象 ${candidates}件 / 追加 ${created}件 / スキップ ${skipped}件`;
     setBulkStatus(message);
-    alert(`一括登録が完了しました。\n${message}`);
+    showToast(`一括登録が完了しました。 ${message}`, "success");
   }
 
   function buildBulkShiftPayloadFromForm() {
@@ -2360,7 +2368,7 @@
   function saveCurrentShiftAsMaster() {
     const name = refs.workplace.value.trim();
     if (!name) {
-      alert("勤務先を入力してから保存してください。");
+      showToast("勤務先を入力してから保存してください。", "error");
       return;
     }
     const effectiveDate = selectedDate || toDateKey(new Date());
@@ -2411,7 +2419,7 @@
     persistUiState();
 
     queueAutoSync("勤務先マスタ保存");
-    alert(existing ? "勤務先マスタを更新しました。" : "勤務先マスタに保存しました。");
+    showToast(existing ? "勤務先マスタを更新しました。" : "勤務先マスタに保存しました。", "success");
   }
 
   function saveMasterFromForm() {
@@ -2422,7 +2430,7 @@
     const taxRate = clamp(toNonNegativeNumber(refs.masterTaxRate.value, state.settings.taxRate), 0, 100);
 
     if (!name) {
-      alert("勤務先名を入力してください。");
+      showToast("勤務先名を入力してください。", "error");
       return;
     }
 
@@ -2473,13 +2481,13 @@
     persistUiState();
 
     queueAutoSync("勤務先マスタ保存");
-    alert("勤務先マスタを保存しました。");
+    showToast("勤務先マスタを保存しました。", "success");
   }
 
   function saveMasterRateFromForm() {
     const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
     if (!master) {
-      alert("先に勤務先マスタを保存してください。");
+      showToast("先に勤務先マスタを保存してください。", "error");
       return;
     }
 
@@ -2489,11 +2497,11 @@
     const transport = toNonNegativeNumber(refs.masterRateTransport.value, 0);
 
     if (!isValidDateKey(effectiveFrom)) {
-      alert("適用開始日を入力してください。");
+      showToast("適用開始日を入力してください。", "error");
       return;
     }
     if (hourlyRate <= 0) {
-      alert("時給を入力してください。");
+      showToast("時給を入力してください。", "error");
       return;
     }
 
@@ -2527,7 +2535,7 @@
     renderSummary();
     renderBulkForm();
     queueAutoSync("給与履歴保存");
-    alert("給与履歴を保存しました。");
+    showToast("給与履歴を保存しました。", "success");
   }
 
   function deleteSelectedMasterRate() {
@@ -2543,7 +2551,7 @@
 
     const rates = getMasterPayRates(master);
     if (rates.length <= 1) {
-      alert("給与履歴は最低1件必要です。");
+      showToast("給与履歴は最低1件必要です。", "error");
       return;
     }
 
@@ -2758,13 +2766,13 @@
       persistState();
       setSyncStatus(`クラウドに保存しました (${formatDateTime(state.sync.lastSyncedAt)})`);
       if (!silent) {
-        alert("クラウド同期が完了しました。");
+        showToast("クラウド同期が完了しました。", "success");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "クラウド同期に失敗しました。";
       setSyncStatus(message);
       if (!silent) {
-        alert(message);
+        showToast(message, "error");
       }
     }
   }
@@ -2832,14 +2840,14 @@
       renderAll();
       setSyncStatus(`クラウドから取得しました (${formatDateTime(state.sync.lastSyncedAt)})`);
       if (!silent) {
-        alert(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。");
+        showToast(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。", "success");
       }
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "クラウド取得に失敗しました。";
       setSyncStatus(message);
       if (!silent) {
-        alert(message);
+        showToast(message, "error");
       }
       return false;
     }
@@ -2992,11 +3000,11 @@
       renderAll();
 
       setSyncStatus("バックアップを読み込みました。");
-      alert("バックアップを読み込みました。");
+      showToast("バックアップを読み込みました。", "success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "バックアップ読み込みに失敗しました。";
       setSyncStatus(message);
-      alert(message);
+      showToast(message, "error");
     } finally {
       refs.backupFileInput.value = "";
     }
@@ -4046,4 +4054,191 @@
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
+
+  /* ============================================================
+     Visual Effects & Micro-interactions
+     ============================================================ */
+
+  // --- Toast Notification ---
+  function showToast(message, type) {
+    type = type || "info";
+    var container = document.getElementById("toastContainer");
+    if (!container) return;
+    var toast = document.createElement("div");
+    toast.className = "toast toast-" + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(function () {
+      toast.classList.add("toast-out");
+      toast.addEventListener("animationend", function () {
+        toast.remove();
+      });
+    }, 2800);
+  }
+
+  // --- Ripple Effect ---
+  function addRipple(event) {
+    var button = event.currentTarget;
+    var rect = button.getBoundingClientRect();
+    var size = Math.max(rect.width, rect.height) * 2;
+    var ripple = document.createElement("span");
+    ripple.className = "ripple-effect";
+    ripple.style.width = ripple.style.height = size + "px";
+    ripple.style.left = (event.clientX - rect.left - size / 2) + "px";
+    ripple.style.top = (event.clientY - rect.top - size / 2) + "px";
+    button.appendChild(ripple);
+    ripple.addEventListener("animationend", function () {
+      ripple.remove();
+    });
+  }
+
+  // --- Particle Burst (on save) ---
+  function emitParticleBurst(x, y) {
+    var container = document.createElement("div");
+    container.className = "particle-burst";
+    container.style.left = x + "px";
+    container.style.top = y + "px";
+    var colors = ["#00ffc8", "#38bdf8", "#a78bfa", "#f472b6", "#fbbf24"];
+    for (var i = 0; i < 18; i++) {
+      var p = document.createElement("div");
+      p.className = "particle";
+      var angle = (Math.PI * 2 * i) / 18 + (Math.random() - 0.5) * 0.5;
+      var dist = 40 + Math.random() * 60;
+      p.style.setProperty("--px", Math.cos(angle) * dist + "px");
+      p.style.setProperty("--py", Math.sin(angle) * dist + "px");
+      p.style.background = colors[i % colors.length];
+      p.style.boxShadow = "0 0 6px " + colors[i % colors.length];
+      container.appendChild(p);
+    }
+    document.body.appendChild(container);
+    setTimeout(function () { container.remove(); }, 1000);
+  }
+
+  // --- Morphing Navigation Indicator ---
+  function updateNavIndicator() {
+    var nav = document.querySelector(".view-nav");
+    if (!nav) return;
+    var indicator = nav.querySelector(".view-nav-indicator");
+    if (!indicator) {
+      indicator = document.createElement("div");
+      indicator.className = "view-nav-indicator";
+      nav.appendChild(indicator);
+    }
+    var activeTab = nav.querySelector(".view-tab.is-active");
+    if (!activeTab) { indicator.style.opacity = "0"; return; }
+    var navRect = nav.getBoundingClientRect();
+    var tabRect = activeTab.getBoundingClientRect();
+    indicator.style.width = tabRect.width + "px";
+    indicator.style.transform = "translateX(" + (tabRect.left - navRect.left - 5) + "px)";
+    indicator.style.opacity = "1";
+  }
+
+  // --- Calendar Mouse-Follow Glow ---
+  function initCalendarGlow() {
+    var grid = document.getElementById("calendarGrid");
+    if (!grid) return;
+    grid.addEventListener("mousemove", function (e) {
+      var cells = grid.querySelectorAll(".calendar-day");
+      for (var i = 0; i < cells.length; i++) {
+        var rect = cells[i].getBoundingClientRect();
+        var mx = ((e.clientX - rect.left) / rect.width * 100);
+        var my = ((e.clientY - rect.top) / rect.height * 100);
+        cells[i].style.setProperty("--mx", mx + "%");
+        cells[i].style.setProperty("--my", my + "%");
+      }
+    });
+  }
+
+  // --- Background Floating Particles ---
+  function initBackgroundParticles() {
+    var canvas = document.getElementById("particleCanvas");
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
+    var particles = [];
+    var PARTICLE_COUNT = 50;
+    var animId = null;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    for (var i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5,
+        alpha: Math.random() * 0.3 + 0.1
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0, 255, 200, " + p.alpha + ")";
+        ctx.fill();
+      }
+
+      // Draw connections
+      for (var i = 0; i < particles.length; i++) {
+        for (var j = i + 1; j < particles.length; j++) {
+          var dx = particles[i].x - particles[j].x;
+          var dy = particles[i].y - particles[j].y;
+          var dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = "rgba(0, 255, 200, " + (0.06 * (1 - dist / 120)) + ")";
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+      animId = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // Pause when hidden
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        cancelAnimationFrame(animId);
+      } else {
+        draw();
+      }
+    });
+  }
+
+  // --- Initialize All Visual Effects ---
+  function initVisualEffects() {
+    // Ripple on all buttons
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest("button");
+      if (btn) addRipple(e);
+    });
+
+    // Calendar glow
+    initCalendarGlow();
+
+    // Background particles
+    initBackgroundParticles();
+
+    // Nav indicator
+    updateNavIndicator();
+    window.addEventListener("resize", updateNavIndicator);
+  }
+
 })();
