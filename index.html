@@ -294,9 +294,10 @@
               <p id="summaryMonthLabel" class="section-note"></p>
             </div>
             <div class="summary-controls">
-              <button id="summaryPrevMonth" type="button" aria-label="サマリー前月" class="mini-btn">◀</button>
-              <button id="summaryNextMonth" type="button" aria-label="サマリー翌月" class="mini-btn">▶</button>
+              <button id="summaryPrevMonth" type="button" aria-label="サマリー前月" class="mini-btn">◄</button>
+              <button id="summaryNextMonth" type="button" aria-label="サマリー翌月" class="mini-btn">►</button>
               <button id="exportCsv" type="button">CSV出力</button>
+              <button id="bulkExportGcal" type="button" class="gcal-btn" aria-label="Googleカレンダー一括登録">📅 Googleカレンダー一括登録</button>
             </div>
           </div>
           <div class="field-row summary-filter-row">
@@ -547,6 +548,75 @@
         </section>
       </section>
     </main>
+
+    <!-- Googleカレンダー一括登録モーダル -->
+    <div id="gcalModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="gcalModalTitle" hidden>
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 id="gcalModalTitle">📅 Googleカレンダー一括登録</h3>
+          <button id="gcalModalClose" type="button" class="modal-close" aria-label="閉じる">×</button>
+        </div>
+        <div class="modal-body">
+          <p class="section-note">登録済みのシフトをICSファイルに出力し、Googleカレンダーにインポートできます。</p>
+
+          <div class="field-row">
+            <label>対象期間</label>
+            <div class="gcal-range-tabs" role="group" aria-label="対象期間の選択">
+              <label class="gcal-range-tab">
+                <input type="radio" name="gcalRange" value="month" checked />
+                今表示月
+              </label>
+              <label class="gcal-range-tab">
+                <input type="radio" name="gcalRange" value="custom" />
+                期間指定
+              </label>
+              <label class="gcal-range-tab">
+                <input type="radio" name="gcalRange" value="all" />
+                全件
+              </label>
+            </div>
+          </div>
+
+          <div id="gcalCustomRange" class="field-row split" hidden>
+            <div>
+              <label for="gcalStartDate">開始日</label>
+              <input id="gcalStartDate" type="date" />
+            </div>
+            <div>
+              <label for="gcalEndDate">終了日</label>
+              <input id="gcalEndDate" type="date" />
+            </div>
+          </div>
+
+          <div class="field-row">
+            <label for="gcalStatusFilter">シフトステータスで絞り込み</label>
+            <select id="gcalStatusFilter">
+              <option value="all">全ステータス</option>
+              <option value="planned">予定</option>
+              <option value="confirmed">確定</option>
+              <option value="attended">出勤済</option>
+              <option value="absent">欠勤</option>
+            </select>
+          </div>
+
+          <div class="field-row">
+            <label for="gcalMasterFilter">勤務先で絞り込み</label>
+            <select id="gcalMasterFilter">
+              <option value="all">全勤務先</option>
+            </select>
+          </div>
+
+          <div id="gcalPreview" class="gcal-preview">
+            <p class="gcal-preview-count">0件のシフトが対象です</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="gcalDownloadIcs" type="button" class="primary">ICSファイルをダウンロード</button>
+          <button id="gcalOpenUrls" type="button">ポップアップで登録（少数向け）</button>
+          <button id="gcalModalCancel" type="button">キャンセル</button>
+        </div>
+      </div>
+    </div>
 
     <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
 

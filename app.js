@@ -258,7 +258,20 @@
     importBackup: document.getElementById("importBackup"),
     backupFileInput: document.getElementById("backupFileInput"),
     pullCloudMerge: document.getElementById("pullCloudMerge"),
-    syncStatus: document.getElementById("syncStatus")
+    syncStatus: document.getElementById("syncStatus"),
+
+    bulkExportGcal: document.getElementById("bulkExportGcal"),
+    gcalModal: document.getElementById("gcalModal"),
+    gcalModalClose: document.getElementById("gcalModalClose"),
+    gcalModalCancel: document.getElementById("gcalModalCancel"),
+    gcalDownloadIcs: document.getElementById("gcalDownloadIcs"),
+    gcalOpenUrls: document.getElementById("gcalOpenUrls"),
+    gcalCustomRange: document.getElementById("gcalCustomRange"),
+    gcalStartDate: document.getElementById("gcalStartDate"),
+    gcalEndDate: document.getElementById("gcalEndDate"),
+    gcalStatusFilter: document.getElementById("gcalStatusFilter"),
+    gcalMasterFilter: document.getElementById("gcalMasterFilter"),
+    gcalPreview: document.getElementById("gcalPreview")
   };
 
   init().catch((error) => {
@@ -874,6 +887,64 @@
       setButtonLoading(btn, true);
       await pullFromCloud("merge");
       setButtonLoading(btn, false);
+    });
+
+    // Googleカレンダー一括登録モーダル
+    refs.bulkExportGcal.addEventListener("click", () => {
+      openGcalModal();
+    });
+
+    refs.gcalModalClose.addEventListener("click", () => closeGcalModal());
+    refs.gcalModalCancel.addEventListener("click", () => closeGcalModal());
+    refs.gcalModal.addEventListener("click", (e) => {
+      if (e.target === refs.gcalModal) closeGcalModal();
+    });
+
+    // 期間選択の切り替え
+    refs.gcalModal.querySelectorAll("input[name='gcalRange']").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        refs.gcalCustomRange.hidden = radio.value !== "custom";
+        updateGcalPreview();
+      });
+    });
+
+    refs.gcalStartDate.addEventListener("change", updateGcalPreview);
+    refs.gcalEndDate.addEventListener("change", updateGcalPreview);
+    refs.gcalStatusFilter.addEventListener("change", updateGcalPreview);
+    refs.gcalMasterFilter.addEventListener("change", updateGcalPreview);
+
+    refs.gcalDownloadIcs.addEventListener("click", () => {
+      const shifts = getFilteredGcalShifts();
+      if (shifts.length === 0) {
+        showToast("対象のシフトがありません。", "warn");
+        return;
+      }
+      downloadIcsFile(shifts);
+      showToast(`${shifts.length}件のシフトをICSファイルに出力しました。`);
+      closeGcalModal();
+    });
+
+    refs.gcalOpenUrls.addEventListener("click", () => {
+      const shifts = getFilteredGcalShifts();
+      if (shifts.length === 0) {
+        showToast("対象のシフトがありません。", "warn");
+        return;
+      }
+      if (shifts.length > 10) {
+        showToast(`${shifts.length}件は多すぎます。ICSダウンロードをお使いください。`, "warn");
+        return;
+      }
+      let opened = 0;
+      for (const { dateKey, shift } of shifts) {
+        const win = openGoogleCalendarEvent(dateKey, shift, true);
+        if (win) opened += 1;
+      }
+      if (opened < shifts.length) {
+        showToast("ポップアップ制限により一部開けませんでした。ブラウザ設定で許可してください。", "warn", 5000);
+      } else {
+        showToast(`${opened}件をGoogleカレンダーで開きました。`);
+      }
+      closeGcalModal();
     });
   }
 
@@ -2840,6 +2911,229 @@
       overtimeMultiplier: Math.max(1, toPositiveNumber(master.overtimeMultiplier, state.settings.overtimeMultiplier)),
       taxRate: clamp(toNonNegativeNumber(master.taxRate, state.settings.taxRate), 0, 100)
     };
+  }
+
+  // =====================================================
+  // Googleカレンダー一括登録
+  // =====================================================
+
+  function openGcalModal() {
+    // 勤務先フィルターの選択肢を更新
+    const masters = state.masters || [];
+    refs.gcalMasterFilter.innerHTML = '<option value="all">全勤務先</option>';
+    for (const master of masters) {
+      const opt = document.createElement("option");
+      opt.value = master.id;
+      opt.textContent = master.name;
+      refs.gcalMasterFilter.appendChild(opt);
+    }
+
+    // 今表示月のデフォルト期間を設定
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+    const firstDay = `${year}-${pad2(month)}-01`;
+    const lastDay = `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
+    refs.gcalStartDate.value = firstDay;
+    refs.gcalEndDate.value = lastDay;
+
+    // ラジオを「今表示月」にリセット
+    const monthRadio = refs.gcalModal.querySelector("input[name='gcalRange'][value='month']");
+    if (monthRadio) monthRadio.checked = true;
+    refs.gcalCustomRange.hidden = true;
+    refs.gcalStatusFilter.value = "all";
+    refs.gcalMasterFilter.value = "all";
+
+    updateGcalPreview();
+    refs.gcalModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    refs.gcalModalClose.focus();
+  }
+
+  function closeGcalModal() {
+    refs.gcalModal.hidden = true;
+    document.body.style.overflow = "";
+    refs.bulkExportGcal.focus();
+  }
+
+  function getGcalRange() {
+    const selected = refs.gcalModal.querySelector("input[name='gcalRange']:checked");
+    const mode = selected ? selected.value : "month";
+
+    if (mode === "all") {
+      return { start: null, end: null };
+    }
+    if (mode === "custom") {
+      return {
+        start: refs.gcalStartDate.value || null,
+        end: refs.gcalEndDate.value || null
+      };
+    }
+    // month
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+    const firstDay = `${year}-${pad2(month)}-01`;
+    const lastDay = `${year}-${pad2(month)}-${pad2(new Date(year, month, 0).getDate())}`;
+    return { start: firstDay, end: lastDay };
+  }
+
+  function getFilteredGcalShifts() {
+    const { start, end } = getGcalRange();
+    const statusFilter = refs.gcalStatusFilter.value;
+    const masterFilter = refs.gcalMasterFilter.value;
+
+    const results = [];
+    for (const [dateKey, rawShifts] of Object.entries(state.shifts)) {
+      if (start && dateKey < start) continue;
+      if (end && dateKey > end) continue;
+
+      const dayShifts = normalizeShiftsOfDay(dateKey, rawShifts);
+      for (const shift of dayShifts) {
+        // ステータスフィルター
+        if (statusFilter !== "all") {
+          const resolvedStatus = resolveAutoShiftStatus(dateKey, shift);
+          if (resolvedStatus !== statusFilter) continue;
+        }
+        // 勤務先フィルター
+        if (masterFilter !== "all") {
+          const matchedMasterId = resolveMasterIdForShift(shift);
+          if (matchedMasterId !== masterFilter) continue;
+        }
+        results.push({ dateKey, shift });
+      }
+    }
+
+    results.sort((a, b) => {
+      const dateDiff = a.dateKey.localeCompare(b.dateKey);
+      if (dateDiff !== 0) return dateDiff;
+      return a.shift.startTime.localeCompare(b.shift.startTime);
+    });
+
+    return results;
+  }
+
+  function updateGcalPreview() {
+    const shifts = getFilteredGcalShifts();
+    const count = shifts.length;
+    const countEl = refs.gcalPreview.querySelector(".gcal-preview-count");
+    if (countEl) countEl.textContent = `${count}件のシフトが対象です`;
+
+    // プレビューリスト（最大5件表示）
+    let listEl = refs.gcalPreview.querySelector(".gcal-preview-list");
+    if (!listEl) {
+      listEl = document.createElement("ul");
+      listEl.className = "gcal-preview-list";
+      refs.gcalPreview.appendChild(listEl);
+    }
+    listEl.innerHTML = "";
+
+    const preview = shifts.slice(0, 5);
+    for (const { dateKey, shift } of preview) {
+      const li = document.createElement("li");
+      li.textContent = `${dateKey} ${shift.startTime}-${shift.endTime} ${shift.workplace || "勤務先未入力"}`;
+      listEl.appendChild(li);
+    }
+    if (count > 5) {
+      const more = document.createElement("li");
+      more.className = "gcal-preview-more";
+      more.textContent = `…他${count - 5}件`;
+      listEl.appendChild(more);
+    }
+
+    refs.gcalDownloadIcs.disabled = count === 0;
+    refs.gcalOpenUrls.disabled = count === 0 || count > 10;
+  }
+
+  function escapeIcsText(str) {
+    return String(str || "")
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\n/g, "\\n");
+  }
+
+  function toIcsUtc(date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      date.getUTCFullYear() +
+      pad(date.getUTCMonth() + 1) +
+      pad(date.getUTCDate()) +
+      "T" +
+      pad(date.getUTCHours()) +
+      pad(date.getUTCMinutes()) +
+      pad(date.getUTCSeconds()) +
+      "Z"
+    );
+  }
+
+  function generateUid(dateKey, shift) {
+    return `shifm-${dateKey}-${shift.startTime}-${shift.id || Math.random().toString(36).slice(2)}@shifm`;
+  }
+
+  function buildIcsContent(shifts) {
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Shifm//Shift Manager//JA",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+      "X-WR-CALNAME:Shifmシフト",
+      "X-WR-TIMEZONE:Asia/Tokyo"
+    ];
+
+    const now = toIcsUtc(new Date());
+
+    for (const { dateKey, shift } of shifts) {
+      const range = resolveShiftRange(dateKey, shift.startTime, shift.endTime);
+      const result = calcShiftPay(dateKey, shift);
+      const status = resolveAutoShiftStatus(dateKey, shift);
+      const statusLabel = getShiftStatusLabel(status);
+
+      const summary = shift.workplace
+        ? `${escapeIcsText(shift.workplace)} シフト`
+        : "バイトシフト";
+
+      const descParts = [
+        `勤務: ${shift.startTime}-${shift.endTime}`,
+        `状態: ${statusLabel}`,
+        `休憩: ${shift.breakMinutes}分`,
+        `時給: ${result.hourlyRate}円`,
+        `交通費: ${result.transport}円`,
+        `支給見込: ${result.gross}円`
+      ];
+      if (shift.lineName) descParts.push(`ライン: ${shift.lineName}`);
+      if (shift.patternName) descParts.push(`パターン: ${shift.patternName}`);
+      if (shift.memo) descParts.push(`メモ: ${shift.memo}`);
+
+      lines.push("BEGIN:VEVENT");
+      lines.push(`UID:${generateUid(dateKey, shift)}`);
+      lines.push(`DTSTAMP:${now}`);
+      lines.push(`DTSTART:${toIcsUtc(range.start)}`);
+      lines.push(`DTEND:${toIcsUtc(range.end)}`);
+      lines.push(`SUMMARY:${escapeIcsText(summary)}`);
+      lines.push(`DESCRIPTION:${escapeIcsText(descParts.join("\n"))}`);
+      if (shift.workplace) {
+        lines.push(`LOCATION:${escapeIcsText(shift.workplace)}`);
+      }
+      lines.push("END:VEVENT");
+    }
+
+    lines.push("END:VCALENDAR");
+    return lines.join("\r\n");
+  }
+
+  function downloadIcsFile(shifts) {
+    const content = buildIcsContent(shifts);
+    const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth() + 1;
+    a.href = url;
+    a.download = `shifm_${year}${pad2(month)}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   function resolveShiftRange(dateKey, startTime, endTime) {

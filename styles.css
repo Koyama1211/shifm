@@ -1665,3 +1665,218 @@ textarea:focus {
   background: rgba(30, 143, 110, 0.2);
   color: var(--text-main);
 }
+
+/* =====================================================
+   Google Calendar Bulk Export Modal
+   ===================================================== */
+
+/* モーダルオーバーレイ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: rgba(14, 40, 30, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: modal-fade 0.18s ease;
+}
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-dialog {
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(30, 143, 110, 0.08);
+  width: min(540px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: modal-slide 0.2s ease;
+}
+
+@keyframes modal-slide {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: var(--font-lg);
+  color: var(--text-main);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  min-height: auto;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.modal-close:hover {
+  background: var(--accent-light);
+  color: var(--accent-strong);
+}
+
+.modal-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.modal-footer button {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* 期間選択タブ */
+.gcal-range-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gcal-range-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-sm);
+  font-weight: 600;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.gcal-range-tab:has(input:checked) {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.gcal-range-tab input[type="radio"] {
+  accent-color: var(--accent);
+  min-height: auto;
+}
+
+/* プレビューエリア */
+.gcal-preview {
+  background: rgba(30, 143, 110, 0.04);
+  border: 1px solid rgba(30, 143, 110, 0.15);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.gcal-preview-count {
+  font-weight: 700;
+  color: var(--accent-strong);
+  margin: 0 0 8px;
+  font-size: var(--font-sm);
+}
+
+.gcal-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gcal-preview-list li {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(30, 143, 110, 0.08);
+}
+
+.gcal-preview-list li:last-child {
+  border-bottom: none;
+}
+
+.gcal-preview-more {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* Googleカレンダーボタン */
+.gcal-btn {
+  background: linear-gradient(135deg, #4285f4, #1a73e8);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+  transition: box-shadow var(--transition-base), filter var(--transition-fast), transform var(--transition-fast);
+}
+
+.gcal-btn:hover {
+  box-shadow: 0 6px 18px rgba(66, 133, 244, 0.4);
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+/* モバイル対応 */
+@media (max-width: 430px) {
+  .modal-dialog {
+    max-height: 85vh;
+    border-radius: var(--radius-lg);
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .modal-footer {
+    flex-direction: column;
+  }
+
+  .modal-footer button {
+    width: 100%;
+  }
+
+  .gcal-btn {
+    font-size: 0.84rem;
+    padding: 10px 10px;
+  }
+}
