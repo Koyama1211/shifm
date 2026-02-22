@@ -58,14 +58,14 @@
         <p>カレンダーで管理しつつ、給与を自動計算</p>
       </header>
 
-      <nav class="view-nav" aria-label="機能ナビゲーション">
-        <button class="view-tab is-active" type="button" data-view-target="shift">シフト</button>
-        <button class="view-tab" type="button" data-view-target="summary">月次サマリー</button>
-        <button class="view-tab" type="button" data-view-target="settings">設定</button>
-        <button class="view-tab" type="button" data-view-target="sync">同期</button>
+      <nav class="view-nav" aria-label="機能ナビゲーション" role="tablist">
+        <button class="view-tab is-active" type="button" data-view-target="shift" role="tab" aria-selected="true" aria-controls="view-shift">シフト</button>
+        <button class="view-tab" type="button" data-view-target="summary" role="tab" aria-selected="false" aria-controls="view-summary">月次サマリー</button>
+        <button class="view-tab" type="button" data-view-target="settings" role="tab" aria-selected="false" aria-controls="view-settings">設定</button>
+        <button class="view-tab" type="button" data-view-target="sync" role="tab" aria-selected="false" aria-controls="view-sync">同期</button>
       </nav>
 
-      <section class="view-section is-active" data-view="shift">
+      <section id="view-shift" class="view-section is-active" data-view="shift" role="tabpanel" aria-labelledby="tab-shift">
         <div class="shift-mobile-switch" aria-label="シフト画面モード切替">
           <button id="showShiftListPane" type="button" class="is-active">表示</button>
           <button id="showShiftFormPane" type="button">入力</button>
@@ -120,23 +120,28 @@
                 <datalist id="workplaceSuggestions"></datalist>
                 <p id="timeeWorkplaceNote" class="section-note" hidden>タイミー選択時は案件先の勤務先名を入力してください。</p>
               </div>
-              <details class="advanced-block compact-block">
-                <summary>勤務パターン（任意）</summary>
-                <div class="field-row split">
-                  <div>
-                    <label for="shiftLine">ライン</label>
-                    <select id="shiftLine" name="shiftLine">
-                      <option value="">未選択</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="shiftPattern">シフトパターン</label>
-                    <select id="shiftPattern" name="shiftPattern">
-                      <option value="">未選択</option>
-                    </select>
+              <div class="collapsible-block">
+                <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="patternBlock">
+                  勤務パターン（任意）
+                  <span class="collapsible-arrow" aria-hidden="true">▼</span>
+                </button>
+                <div id="patternBlock" class="collapsible-content" hidden>
+                  <div class="field-row split">
+                    <div>
+                      <label for="shiftLine">ライン</label>
+                      <select id="shiftLine" name="shiftLine">
+                        <option value="">未選択</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="shiftPattern">シフトパターン</label>
+                      <select id="shiftPattern" name="shiftPattern">
+                        <option value="">未選択</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
-              </details>
+              </div>
               <div class="field-row split">
                 <div>
                   <label for="startTime">開始 <span class="required-mark">*</span></label>
@@ -185,8 +190,12 @@
                 <button id="newShift" type="button">新規入力</button>
               </div>
             </form>
-            <details class="advanced-block low-frequency-block">
-              <summary>補助機能（低頻度）</summary>
+            <div class="collapsible-block">
+              <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="auxBlock">
+                補助機能
+                <span class="collapsible-arrow" aria-hidden="true">▼</span>
+              </button>
+              <div id="auxBlock" class="collapsible-content" hidden>
               <div class="actions advanced-actions">
                 <button id="saveAsMaster" type="button">勤務先マスタに保存</button>
                 <button id="addGoogleCalendar" type="button">Google Calendar登録</button>
@@ -272,12 +281,12 @@
                 </div>
                 <p id="bulkShiftStatus" class="section-note"></p>
               </div>
-            </details>
+            </div>
           </section>
         </div>
       </section>
 
-      <section class="view-section" data-view="summary">
+      <section id="view-summary" class="view-section" data-view="summary" role="tabpanel" aria-labelledby="tab-summary" aria-hidden="true">
         <section class="panel summary-panel">
           <div class="summary-head">
             <div>
@@ -296,8 +305,12 @@
               <option value="all">全勤務先</option>
             </select>
           </div>
-          <details class="advanced-block">
-            <summary>給与実績入力（入力した勤務先は自動で支払済みに反映）</summary>
+          <div class="collapsible-block">
+            <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="payrollBlock">
+              給与実績入力（入力した勤務先は自動で支払済みに反映）
+              <span class="collapsible-arrow" aria-hidden="true">▼</span>
+            </button>
+            <div id="payrollBlock" class="collapsible-content" hidden>
             <form id="payrollForm">
               <div class="field-row split">
                 <div>
@@ -326,7 +339,8 @@
               </div>
             </form>
             <ul id="payrollList" class="pattern-list"></ul>
-          </details>
+            </div>
+          </div>
           <div class="cards">
             <article class="card">
               <p>勤務日数</p>
@@ -375,7 +389,7 @@
         </section>
       </section>
 
-      <section class="view-section" data-view="settings">
+      <section id="view-settings" class="view-section" data-view="settings" role="tabpanel" aria-labelledby="tab-settings" aria-hidden="true">
         <div class="view-layout settings-layout">
           <section class="panel settings-panel">
             <h3>給与設定</h3>
@@ -408,8 +422,7 @@
           </section>
 
           <section class="panel master-panel">
-            <details class="advanced-block">
-              <summary>勤務先マスタ管理（低頻度）</summary>
+            <h3>勤務先マスタ管理</h3>
               <form id="masterForm">
                 <input id="masterId" name="masterId" type="hidden" />
                 <div class="field-row">
@@ -435,8 +448,12 @@
                   <button id="masterNew" type="button">新規</button>
                   <button id="masterDelete" type="button" class="danger">削除</button>
                 </div>
-                <details class="advanced-block">
-                  <summary>時給・交通費の期間管理</summary>
+                <div class="collapsible-block">
+                  <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="masterRateBlock">
+                    時給・交通費の期間管理
+                    <span class="collapsible-arrow" aria-hidden="true">▼</span>
+                  </button>
+                  <div id="masterRateBlock" class="collapsible-content" hidden>
                   <p class="section-note">「適用開始日」ごとに給与条件を保存します。日次入力では自動反映されます。</p>
                   <input id="masterRateId" name="masterRateId" type="hidden" />
                   <div class="field-row split">
@@ -459,9 +476,14 @@
                     <button id="masterRateDelete" type="button" class="danger">履歴を削除</button>
                   </div>
                   <ul id="masterRateList" class="pattern-list"></ul>
-                </details>
-                <details class="advanced-block">
-                  <summary>ライン・シフトパターン設定</summary>
+                  </div>
+                </div>
+                <div class="collapsible-block">
+                  <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="patternSettingBlock">
+                    ライン・シフトパターン設定
+                    <span class="collapsible-arrow" aria-hidden="true">▼</span>
+                  </button>
+                  <div id="patternSettingBlock" class="collapsible-content" hidden>
                   <input id="patternId" name="patternId" type="hidden" />
                   <div class="field-row split">
                     <div>
@@ -493,15 +515,15 @@
                     <button id="patternDelete" type="button" class="danger">削除</button>
                   </div>
                   <ul id="patternList" class="pattern-list"></ul>
-                </details>
+                  </div>
+                </div>
                 <ul id="masterList" class="master-list"></ul>
               </form>
-            </details>
           </section>
         </div>
       </section>
 
-      <section class="view-section" data-view="sync">
+      <section id="view-sync" class="view-section" data-view="sync" role="tabpanel" aria-labelledby="tab-sync" aria-hidden="true">
         <section class="panel sync-panel">
           <h3>端末同期 (Supabase・自動)</h3>
           <p class="section-note">同じアカウントでログインすれば、保存内容は自動でクラウド同期されます。</p>
@@ -509,17 +531,24 @@
             <button id="pullCloudMerge" type="button">今すぐクラウド再取得</button>
           </div>
           <p id="syncStatus">自動同期を準備中...</p>
-          <details class="advanced-block">
-            <summary>バックアップ（低頻度）</summary>
-            <div class="actions advanced-actions">
-              <button id="exportBackup" type="button">バックアップ書き出し</button>
-              <button id="importBackup" type="button">バックアップ読み込み</button>
+          <div class="collapsible-block">
+            <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="backupBlock">
+              バックアップ（低頻度）
+              <span class="collapsible-arrow" aria-hidden="true">▼</span>
+            </button>
+            <div id="backupBlock" class="collapsible-content" hidden>
+              <div class="actions advanced-actions">
+                <button id="exportBackup" type="button">バックアップ書き出し</button>
+                <button id="importBackup" type="button">バックアップ読み込み</button>
+              </div>
+              <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
             </div>
-            <input id="backupFileInput" type="file" accept=".json,application/json" hidden />
-          </details>
+          </div>
         </section>
       </section>
     </main>
+
+    <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./app.js"></script>
