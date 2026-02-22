@@ -6,9 +6,25 @@
   --text-muted: #455147;
   --accent: #1e8f6e;
   --accent-strong: #116f57;
+  --accent-light: rgba(30, 143, 110, 0.1);
   --danger: #b83b3b;
+  --danger-light: rgba(184, 59, 59, 0.1);
   --line: #d7dfd4;
   --shadow: 0 14px 28px rgba(14, 40, 30, 0.12);
+  --shadow-sm: 0 4px 12px rgba(14, 40, 30, 0.08);
+  --shadow-lg: 0 20px 40px rgba(14, 40, 30, 0.16);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+  --font-xs: 0.75rem;
+  --font-sm: 0.84rem;
+  --font-base: 1rem;
+  --font-lg: 1.1rem;
+  --font-xl: 1.3rem;
 }
 
 * {
@@ -1052,4 +1068,600 @@ th {
   #exportCsv {
     width: 100%;
   }
+}
+
+/* =====================================================
+   Toast Notification
+   ===================================================== */
+#toast-container {
+  position: fixed;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #fff;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  pointer-events: auto;
+  animation: toast-in 0.22s ease;
+  max-width: min(360px, 88vw);
+  text-align: center;
+}
+
+.toast.toast-success { background: rgba(30, 143, 110, 0.92); }
+.toast.toast-error   { background: rgba(184, 59, 59, 0.92); }
+.toast.toast-info    { background: rgba(50, 100, 160, 0.92); }
+.toast.toast-warn    { background: rgba(180, 120, 20, 0.92); }
+
+.toast.toast-out {
+  animation: toast-out 0.22s ease forwards;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.96); }
+}
+
+/* =====================================================
+   Custom Confirm Dialog
+   ===================================================== */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(3px);
+  z-index: 9100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.15s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.confirm-dialog {
+  background: var(--bg-card-strong);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  padding: 24px 24px 18px;
+  width: min(340px, 88vw);
+  animation: dialog-in 0.2s ease;
+}
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.confirm-dialog p {
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text-main);
+}
+
+.confirm-dialog .confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-dialog .confirm-actions button {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.confirm-dialog .confirm-actions button:hover { opacity: 0.82; }
+
+.confirm-btn-cancel {
+  background: var(--line);
+  color: var(--text-main);
+}
+
+.confirm-btn-ok {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* =====================================================
+   Loading Spinner on Buttons
+   ===================================================== */
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.btn-loading::after {
+  content: '';
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255,255,255,0.6);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-left: 7px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* =====================================================
+   Inline Form Validation
+   ===================================================== */
+.field-error {
+  display: block;
+  color: var(--danger);
+  font-size: 0.78rem;
+  min-height: 1.1em;
+  margin-top: 3px;
+}
+
+input.has-error,
+select.has-error {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 3px rgba(184, 59, 59, 0.15);
+}
+
+/* =====================================================
+   Collapsible Block (replaces <details>)
+   ===================================================== */
+.collapsible-block {
+  margin: 8px 0;
+}
+
+.collapsible-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(30, 143, 110, 0.07);
+  border: 1px solid rgba(30, 143, 110, 0.18);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.collapsible-toggle:hover {
+  background: rgba(30, 143, 110, 0.13);
+  border-color: rgba(30, 143, 110, 0.3);
+}
+
+.collapsible-toggle[aria-expanded="true"] {
+  border-radius: 8px 8px 0 0;
+  border-bottom-color: transparent;
+  background: rgba(30, 143, 110, 0.12);
+}
+
+.collapsible-arrow {
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.collapsible-toggle[aria-expanded="true"] .collapsible-arrow {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  border: 1px solid rgba(30, 143, 110, 0.18);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  animation: collapsible-open 0.18s ease;
+}
+
+@keyframes collapsible-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =====================================================
+   Mobile UI Enhancements
+   ===================================================== */
+
+/* ボトムナビゲーションのアイコン追加 */
+@media (max-width: 430px) {
+  .view-tab[data-view-target="shift"]::before    { content: "📅 "; }
+  .view-tab[data-view-target="summary"]::before  { content: "📊 "; }
+  .view-tab[data-view-target="settings"]::before { content: "⚙️ "; }
+  .view-tab[data-view-target="sync"]::before     { content: "☁️ "; }
+
+  .view-nav {
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  }
+
+  /* シフトリストアイテムのタッチ操作改善 */
+  .day-shift-item {
+    min-height: 56px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.12s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .day-shift-item:active {
+    background: rgba(30, 143, 110, 0.08);
+    transform: scale(0.98);
+  }
+
+  .day-shift-item.active {
+    background: rgba(30, 143, 110, 0.12);
+    border-color: var(--accent);
+  }
+
+  /* モバイルシフト切り替えスイッチの改善 */
+  .shift-mobile-switch {
+    position: sticky;
+    top: calc(env(safe-area-inset-top));
+    z-index: 10;
+    background: rgba(244, 247, 241, 0.95);
+    backdrop-filter: blur(8px);
+    padding: 6px 0;
+    margin-bottom: 10px;
+  }
+
+  /* フォームパネルのスクロール改善 */
+  .form-panel {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+
+  /* カレンダーパネルのスクロール改善 */
+  .calendar-panel {
+    overflow-y: auto;
+  }
+
+  /* アクションボタンのフローティング感 */
+  #shiftForm > .actions {
+    box-shadow: 0 -8px 20px rgba(244, 247, 241, 0.9);
+  }
+}
+
+/* タブレット（860px以下）のUI改善 */
+@media (max-width: 860px) {
+  .day-shift-item {
+    cursor: pointer;
+    transition: background 0.12s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .day-shift-item:hover {
+    background: rgba(30, 143, 110, 0.06);
+  }
+}
+
+/* =====================================================
+   Desktop 2-Column Layout Enhancements
+   ===================================================== */
+
+/* 1100px以上：シフトレイアウトの比率最適化 */
+@media (min-width: 861px) {
+  .shift-layout {
+    grid-template-columns: 1.3fr 1fr;
+    align-items: start;
+    gap: 18px;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr 1.4fr;
+    align-items: start;
+    gap: 18px;
+  }
+
+  /* カレンダーパネルをスティッキーに */
+  .calendar-panel {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  /* フォームパネルのスクロール */
+  .form-panel {
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  /* サマリーパネルの横幅最適化 */
+  .summary-panel {
+    max-width: 900px;
+  }
+
+  /* カードグリッドを3列に */
+  .cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* パネルのホバーエフェクト */
+  .panel {
+    transition: box-shadow 0.2s ease;
+  }
+
+  .panel:hover {
+    box-shadow: 0 18px 36px rgba(14, 40, 30, 0.15);
+  }
+
+  /* ボタンのホバーエフェクト強化 */
+  button:not(:disabled):hover {
+    filter: brightness(1.04);
+    transform: translateY(-1px);
+    transition: filter 0.12s, transform 0.12s;
+  }
+
+  button:not(:disabled):active {
+    transform: translateY(0);
+    filter: brightness(0.97);
+  }
+}
+
+/* =====================================================
+   Design System: Micro-interactions & Glassmorphism
+   ===================================================== */
+
+/* フォーカスリングの統一 */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ボタンのマイクロインタラクション */
+button {
+  transition: filter var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+button:not(:disabled):active {
+  transform: scale(0.97);
+  filter: brightness(0.95);
+}
+
+/* プライマリボタンのグラデーション強化 */
+.primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  box-shadow: 0 4px 14px rgba(30, 143, 110, 0.3);
+  transition: box-shadow var(--transition-base), transform var(--transition-fast), filter var(--transition-fast);
+}
+
+.primary:not(:disabled):hover {
+  box-shadow: 0 6px 20px rgba(30, 143, 110, 0.4);
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+.primary:not(:disabled):active {
+  box-shadow: 0 2px 8px rgba(30, 143, 110, 0.25);
+  transform: translateY(0) scale(0.98);
+}
+
+/* デンジャーボタンのスタイル強化 */
+.danger {
+  background: linear-gradient(135deg, var(--danger) 0%, #8b2020 100%);
+  box-shadow: 0 4px 14px rgba(184, 59, 59, 0.25);
+  transition: box-shadow var(--transition-base), transform var(--transition-fast), filter var(--transition-fast);
+}
+
+.danger:not(:disabled):hover {
+  box-shadow: 0 6px 20px rgba(184, 59, 59, 0.35);
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+/* パネルのグラスモーフィズム強化 */
+.panel {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.6);
+  transition: box-shadow var(--transition-base);
+}
+
+/* カードのグラスモーフィズム */
+.card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* インプットのフォーカスアニメーション */
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+select,
+textarea {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(30, 143, 110, 0.15);
+  outline: none;
+}
+
+/* シフトステータスバッジのアニメーション */
+.shift-status-badge {
+  transition: transform var(--transition-fast);
+}
+
+.day-shift-item:hover .shift-status-badge {
+  transform: scale(1.05);
+}
+
+/* カレンダーセルのホバーアニメーション */
+.calendar-day {
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.calendar-day:not(.outside):hover {
+  background: rgba(30, 143, 110, 0.07);
+  transform: scale(1.02);
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
+  position: relative;
+}
+
+.calendar-day.active {
+  background: linear-gradient(135deg, rgba(30, 143, 110, 0.15), rgba(17, 111, 87, 0.1));
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(30, 143, 110, 0.25);
+}
+
+/* ナビゲーションタブのアニメーション */
+.view-tab {
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.view-tab:not(.is-active):hover {
+  background: rgba(30, 143, 110, 0.06);
+  border-color: rgba(30, 143, 110, 0.25);
+}
+
+.view-tab.is-active {
+  box-shadow: 0 4px 12px rgba(30, 143, 110, 0.3);
+}
+
+/* シフトリストアイテムのアニメーション */
+.day-shift-item {
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.day-shift-item:hover {
+  background: rgba(30, 143, 110, 0.05);
+  transform: translateX(2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.day-shift-item.active {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  transform: translateX(2px);
+}
+
+/* セクションフェードインアニメーション強化 */
+@keyframes section-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ローディングスピナーのアニメーション */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* パターンリスト・マスターリストのアイテムアニメーション */
+.pattern-list li,
+.master-list li {
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.pattern-list li:hover,
+.master-list li:hover {
+  background: var(--accent-light);
+  transform: translateX(2px);
+}
+
+/* サマリーカードの数値強調 */
+.card strong {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ヘッダーのグラスモーフィズム */
+.app-header {
+  position: relative;
+}
+
+.app-header::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
+/* スクロールバーのカスタマイズ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* 選択テキストのカラー */
+::selection {
+  background: rgba(30, 143, 110, 0.2);
+  color: var(--text-main);
 }

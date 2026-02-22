@@ -1,6 +1,87 @@
 (function () {
   "use strict";
 
+  // =====================================================
+  // Toast Notification
+  // =====================================================
+  function showToast(message, type = "success", duration = 3000) {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+    const el = document.createElement("div");
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    container.appendChild(el);
+    const remove = () => {
+      el.classList.add("toast-out");
+      el.addEventListener("animationend", () => el.remove(), { once: true });
+    };
+    const timer = setTimeout(remove, duration);
+    el.addEventListener("click", () => { clearTimeout(timer); remove(); });
+  }
+
+  // =====================================================
+  // Inline Form Validation Helpers
+  // =====================================================
+  function setFieldError(inputEl, message) {
+    if (!inputEl) return;
+    inputEl.classList.add("has-error");
+    let errEl = inputEl.parentElement.querySelector(".field-error");
+    if (!errEl) {
+      errEl = document.createElement("span");
+      errEl.className = "field-error";
+      inputEl.insertAdjacentElement("afterend", errEl);
+    }
+    errEl.textContent = message;
+    inputEl.focus();
+  }
+
+  function clearFormErrors(formEl) {
+    if (!formEl) return;
+    formEl.querySelectorAll(".has-error").forEach((el) => el.classList.remove("has-error"));
+    formEl.querySelectorAll(".field-error").forEach((el) => (el.textContent = ""));
+  }
+
+  // =====================================================
+  // Custom Confirm Dialog
+  // =====================================================
+  function showConfirm(message) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "confirm-overlay";
+      overlay.innerHTML = `
+        <div class="confirm-dialog" role="dialog" aria-modal="true">
+          <p>${message.replace(/\n/g, "<br>")}</p>
+          <div class="confirm-actions">
+            <button class="confirm-btn-cancel" type="button">キャンセル</button>
+            <button class="confirm-btn-ok" type="button">削除する</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const close = (result) => { overlay.remove(); resolve(result); };
+      overlay.querySelector(".confirm-btn-ok").addEventListener("click", () => close(true));
+      overlay.querySelector(".confirm-btn-cancel").addEventListener("click", () => close(false));
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) close(false); });
+      overlay.querySelector(".confirm-btn-ok").focus();
+    });
+  }
+
+  // =====================================================
+  // Button Loading State
+  // =====================================================
+  function setButtonLoading(btn, loading, originalText) {
+    if (!btn) return;
+    if (loading) {
+      btn.dataset.originalText = btn.textContent;
+      btn.disabled = true;
+      btn.classList.add("btn-loading");
+    } else {
+      btn.disabled = false;
+      btn.classList.remove("btn-loading");
+      if (originalText !== undefined) btn.textContent = originalText;
+      else if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+    }
+  }
+
   const STORAGE_KEY = "shifm_store_v3";
   const UI_VIEW_KEY = "shifm_ui_view_v1";
   const UI_STATE_KEY = "shifm_ui_state_v1";
@@ -250,23 +331,29 @@
     const email = refs.authUserId.value.trim().toLowerCase();
     const password = refs.authPassword.value;
     const passwordConfirm = refs.authPasswordConfirm.value;
+    const btn = refs.authSubmit;
+    setButtonLoading(btn, true);
 
     if (!email) {
       setAuthStatus("メールアドレスを入力してください。");
+      setButtonLoading(btn, false);
       return;
     }
     if (!isValidEmail(email)) {
       setAuthStatus("メールアドレス形式で入力してください。");
+      setButtonLoading(btn, false);
       return;
     }
     if (!password || password.length < 6) {
       setAuthStatus("パスワードは6文字以上で入力してください。");
+      setButtonLoading(btn, false);
       return;
     }
 
     if (authMode === "register") {
       if (password !== passwordConfirm) {
         setAuthStatus("パスワード確認が一致しません。");
+        setButtonLoading(btn, false);
         return;
       }
       const { data, error } = await supabaseClient.auth.signUp({
@@ -275,6 +362,7 @@
       });
       if (error) {
         setAuthStatus(error.message);
+        setButtonLoading(btn, false);
         return;
       }
       refs.authPassword.value = "";
@@ -282,12 +370,14 @@
       if (data && data.session && data.user) {
         authenticatedUserId = data.user.email || data.user.id;
         setAuthStatus("");
+        setButtonLoading(btn, false);
         unlockApp();
         return;
       }
       authMode = "login";
       renderAuthView();
       setAuthStatus("登録しました。確認メールが届いた場合は認証後にログインしてください。");
+      setButtonLoading(btn, false);
       return;
     }
 
@@ -297,6 +387,7 @@
     });
     if (error) {
       setAuthStatus(error.message);
+      setButtonLoading(btn, false);
       return;
     }
 
@@ -304,6 +395,7 @@
     refs.authPassword.value = "";
     refs.authPasswordConfirm.value = "";
     setAuthStatus("");
+    setButtonLoading(btn, false);
     unlockApp();
   }
 
@@ -368,11 +460,23 @@
   }
 
   function bindEvents() {
+    // collapsible-toggle の共通ハンドラ
+    document.querySelectorAll(".collapsible-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const targetId = btn.getAttribute("aria-controls");
+        const content = document.getElementById(targetId);
+        if (!content) return;
+        const isExpanded = btn.getAttribute("aria-expanded") === "true";
+        btn.setAttribute("aria-expanded", isExpanded ? "false" : "true");
+        content.hidden = isExpanded;
+      });
+    });
+
     refs.logoutButton.addEventListener("click", async () => {
       if (supabaseClient) {
         const { error } = await supabaseClient.auth.signOut();
         if (error) {
-          alert(`ログアウトに失敗しました: ${error.message}`);
+          showToast(`ログアウトに失敗しました: ${error.message}`, "error");
           return;
         }
       }
@@ -400,7 +504,7 @@
 
     refs.jumpToForm.addEventListener("click", () => {
       if (!selectedDate) {
-        alert("先に日付を選択してください。");
+        showToast("先に日付を選択してください。", "warn");
         return;
       }
       setMobileShiftPane("form");
@@ -533,11 +637,9 @@
 
     refs.shiftForm.addEventListener("submit", (event) => {
       event.preventDefault();
+      clearFormErrors(refs.shiftForm);
       if (!selectedDate) {
-        alert("先に日付を選択してください。");
-        return;
-      }
-      if (typeof refs.shiftForm.reportValidity === "function" && !refs.shiftForm.reportValidity()) {
+        showToast("先に日付を選択してください。", "warn");
         return;
       }
 
@@ -545,7 +647,17 @@
       try {
         shift = buildShiftFromForm();
       } catch (error) {
-        alert(error.message);
+        // エラーメッセージに応じて該当フィールドにインライン表示
+        const msg = error.message;
+        if (msg.includes("勤務先")) {
+          setFieldError(refs.workplace, msg);
+        } else if (msg.includes("時刻") || msg.includes("時刻")) {
+          setFieldError(refs.startTime, msg);
+        } else if (msg.includes("時給")) {
+          setFieldError(refs.hourlyRate, msg);
+        } else {
+          showToast(msg, "error");
+        }
         return;
       }
 
@@ -571,7 +683,7 @@
       renderWorkplaceSuggestions();
       renderSummary();
       queueAutoSync("シフト保存");
-      alert("シフトを保存しました。");
+      showToast("シフトを保存しました。");
     });
 
     refs.newShift.addEventListener("click", () => {
@@ -586,7 +698,7 @@
       saveCurrentShiftAsMaster();
     });
 
-    refs.deleteShift.addEventListener("click", () => {
+    refs.deleteShift.addEventListener("click", async () => {
       if (!selectedDate) {
         return;
       }
@@ -597,7 +709,7 @@
       }
 
       if (!selectedShiftId) {
-        alert("削除するシフトを一覧から選択してください。");
+        showToast("削除するシフトを一覧から選択してください。", "warn");
         return;
       }
 
@@ -606,7 +718,7 @@
         return;
       }
 
-      if (!window.confirm("選択中のシフトを削除しますか？")) {
+      if (!await showConfirm("選択中のシフトを削除しますか？")) {
         return;
       }
 
@@ -628,7 +740,7 @@
 
     refs.addGoogleCalendar.addEventListener("click", () => {
       if (!selectedDate) {
-        alert("先に日付を選択してください。");
+        showToast("先に日付を選択してください。", "warn");
         return;
       }
 
@@ -636,7 +748,7 @@
       try {
         shift = buildShiftFromForm();
       } catch (error) {
-        alert(error.message);
+        showToast(error.message, "error");
         return;
       }
 
@@ -649,7 +761,7 @@
       }
       const dayShifts = getDayShifts(selectedDate);
       if (dayShifts.length === 0) {
-        alert("この日の登録シフトがありません。");
+        showToast("この日の登録シフトがありません。", "warn");
         return;
       }
 
@@ -662,7 +774,7 @@
       }
 
       if (opened < dayShifts.length) {
-        alert("ポップアップ制限により一部開けませんでした。ブラウザ設定で許可してください。");
+        showToast("ポップアップ制限により一部開けませんでした。ブラウザ設定で許可してください。", "warn", 5000);
       }
     });
 
@@ -683,7 +795,7 @@
       renderCalendar();
       renderSummary();
       queueAutoSync("設定保存");
-      alert("給与設定を保存しました。");
+      showToast("給与設定を保存しました。");
     });
 
     refs.masterForm.addEventListener("submit", (event) => {
@@ -715,7 +827,7 @@
       renderMasterRateList();
     });
 
-    refs.masterRateDelete.addEventListener("click", () => {
+    refs.masterRateDelete.addEventListener("click", async () => {
       deleteSelectedMasterRate();
     });
 
@@ -736,7 +848,7 @@
     refs.exportCsv.addEventListener("click", () => {
       const monthRows = getCurrentMonthRows();
       if (monthRows.length === 0) {
-        alert("この月のシフトがありません。");
+        showToast("この月のシフトがありません。", "warn");
         return;
       }
       exportMonthlyCsv(monthRows);
@@ -751,11 +863,17 @@
     });
 
     refs.backupFileInput.addEventListener("change", async () => {
+      const btn = refs.importBackup;
+      setButtonLoading(btn, true);
       await importBackupFromFile();
+      setButtonLoading(btn, false);
     });
 
     refs.pullCloudMerge.addEventListener("click", async () => {
+      const btn = refs.pullCloudMerge;
+      setButtonLoading(btn, true);
       await pullFromCloud("merge");
+      setButtonLoading(btn, false);
     });
   }
 
@@ -787,6 +905,7 @@
       const target = tab.getAttribute("data-view-target");
       const isActive = target === viewName;
       tab.classList.toggle("is-active", isActive);
+      tab.setAttribute("aria-selected", isActive ? "true" : "false");
       if (isActive) {
         tab.setAttribute("aria-current", "page");
       } else {
@@ -867,51 +986,61 @@
 
   function renderCalendar() {
     refs.monthLabel.textContent = `${currentMonth.getFullYear()}年 ${currentMonth.getMonth() + 1}月`;
-    refs.calendarGrid.innerHTML = "";
 
-    for (let i = 0; i < WEEKDAYS.length; i += 1) {
-      const day = WEEKDAYS[i];
-      const dayCell = document.createElement("div");
-      dayCell.className = "calendar-weekday";
-      if (i === 0) {
-        dayCell.classList.add("sun");
-      } else if (i === 6) {
-        dayCell.classList.add("sat");
+    // 曜日ヘッダーがなければ初回のみ生成
+    if (refs.calendarGrid.querySelectorAll(".calendar-weekday").length === 0) {
+      for (let i = 0; i < WEEKDAYS.length; i += 1) {
+        const dayCell = document.createElement("div");
+        dayCell.className = "calendar-weekday";
+        if (i === 0) dayCell.classList.add("sun");
+        else if (i === 6) dayCell.classList.add("sat");
+        dayCell.textContent = WEEKDAYS[i];
+        refs.calendarGrid.appendChild(dayCell);
       }
-      dayCell.textContent = day;
-      refs.calendarGrid.appendChild(dayCell);
     }
 
     const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
     const startDate = new Date(firstDay);
     startDate.setDate(firstDay.getDate() - firstDay.getDay());
 
-    for (let i = 0; i < 42; i += 1) {
+    // 日セルの差分更新：既存のセルを再利用し、内容のみ更新
+    const existingCells = Array.from(refs.calendarGrid.querySelectorAll(".calendar-day"));
+    const cellsNeeded = 42;
+
+    // セル数の調整
+    while (existingCells.length < cellsNeeded) {
+      const cell = document.createElement("div");
+      cell.className = "calendar-day";
+      refs.calendarGrid.appendChild(cell);
+      existingCells.push(cell);
+    }
+    while (existingCells.length > cellsNeeded) {
+      existingCells.pop().remove();
+    }
+
+    for (let i = 0; i < cellsNeeded; i += 1) {
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + i);
       const dayKey = toDateKey(date);
       const dayShifts = getDayShifts(dayKey);
+      const dayOfWeek = date.getDay();
 
       let grossTotal = 0;
       for (const shift of dayShifts) {
         grossTotal += calcShiftPay(dayKey, shift).gross;
       }
 
-      const cell = document.createElement("div");
+      const cell = existingCells[i];
+      // クラスの再設定
       cell.className = "calendar-day";
-      const dayOfWeek = date.getDay();
-      if (dayOfWeek === 0) {
-        cell.classList.add("sun");
-      } else if (dayOfWeek === 6) {
-        cell.classList.add("sat");
-      }
-      if (date.getMonth() !== currentMonth.getMonth()) {
-        cell.classList.add("outside");
-      }
-      if (dayKey === selectedDate) {
-        cell.classList.add("active");
-      }
+      if (dayOfWeek === 0) cell.classList.add("sun");
+      else if (dayOfWeek === 6) cell.classList.add("sat");
+      if (date.getMonth() !== currentMonth.getMonth()) cell.classList.add("outside");
+      if (dayKey === selectedDate) cell.classList.add("active");
       cell.setAttribute("data-date", dayKey);
+
+      // 内容の再構築
+      cell.innerHTML = "";
 
       const number = document.createElement("div");
       number.className = "day-number";
@@ -937,19 +1066,27 @@
         cell.appendChild(pay);
       }
 
-      cell.addEventListener("click", () => {
-        selectedDate = dayKey;
-        selectedShiftId = null;
-        persistUiState();
-        renderCalendar();
-        renderShiftForm();
-        renderDayShiftList();
-        if (isCompactViewport()) {
-          setMobileShiftPane("list");
-        }
-      });
-
-      refs.calendarGrid.appendChild(cell);
+      // イベントリスナーはデータ属性で管理して重複登録を防ぐ
+      if (cell.dataset.bound !== dayKey) {
+        const newCell = cell.cloneNode(false);
+        newCell.innerHTML = cell.innerHTML;
+        newCell.dataset.bound = dayKey;
+        newCell.addEventListener("click", () => {
+          selectedDate = dayKey;
+          selectedShiftId = null;
+          persistUiState();
+          renderCalendar();
+          renderShiftForm();
+          renderDayShiftList();
+          if (isCompactViewport()) {
+            setMobileShiftPane("list");
+          }
+        });
+        cell.parentNode.replaceChild(newCell, cell);
+        existingCells[i] = newCell;
+      } else {
+        // 同じ日付のセルは内容のみ更新（イベントはそのまま）
+      }
     }
   }
 
@@ -1013,8 +1150,14 @@
       const result = calcShiftPay(selectedDate, shift);
       const li = document.createElement("li");
       li.className = "day-shift-item";
+      li.setAttribute("role", "button");
+      li.setAttribute("tabindex", "0");
+      li.setAttribute("aria-label", `${shift.startTime}〜${shift.endTime} ${shift.workplace || "勤務先未入力"}`);
       if (shift.id === selectedShiftId) {
         li.classList.add("active");
+        li.setAttribute("aria-pressed", "true");
+      } else {
+        li.setAttribute("aria-pressed", "false");
       }
 
       const left = document.createElement("div");
@@ -1049,13 +1192,20 @@
       li.appendChild(left);
       li.appendChild(pay);
 
-      li.addEventListener("click", () => {
+      const selectShift = () => {
         selectedShiftId = shift.id;
         renderShiftForm();
         renderDayShiftList();
         if (isCompactViewport()) {
           setMobileShiftPane("form");
           scrollToShiftForm();
+        }
+      };
+      li.addEventListener("click", selectShift);
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectShift();
         }
       });
 
@@ -1391,7 +1541,7 @@
   function savePatternFromForm() {
     const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
     if (!master) {
-      alert("先に勤務先マスタを選択してください。");
+      showToast("先に勤務先マスタを選択してください。", "warn");
       return;
     }
 
@@ -1403,11 +1553,11 @@
     const breakMinutes = toNonNegativeNumber(refs.patternBreakMinutes.value, 0);
 
     if (!name) {
-      alert("パターン名を入力してください。");
+      showToast("パターン名を入力してください。", "warn");
       return;
     }
     if (!isValidTime(startTime) || !isValidTime(endTime)) {
-      alert("開始時刻/終了時刻を正しく入力してください。");
+      showToast("開始時刻/終了時刻を正しく入力してください。", "warn");
       return;
     }
 
@@ -1423,7 +1573,7 @@
       0
     );
     if (!pattern) {
-      alert("シフトパターンの入力内容を確認してください。");
+      showToast("シフトパターンの入力内容を確認してください。", "warn");
       return;
     }
 
@@ -1443,10 +1593,10 @@
     renderPatternList();
     renderShiftPatternControls();
     queueAutoSync("シフトパターン保存");
-    alert("シフトパターンを保存しました。");
+    showToast("シフトパターンを保存しました。");
   }
 
-  function deleteSelectedPattern() {
+  async function deleteSelectedPattern() {
     const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
     if (!master) {
       return;
@@ -1463,7 +1613,7 @@
       return;
     }
 
-    if (!window.confirm(`パターン「${target.name}」を削除しますか？`)) {
+    if (!await showConfirm(`パターン「${target.name}」を削除しますか？`)) {
       return;
     }
 
@@ -1614,19 +1764,19 @@
   function savePayrollFromForm() {
     const monthKey = normalizeMonthKeyInput(refs.payrollMonth.value);
     if (!monthKey) {
-      alert("対象月を入力してください。");
+      showToast("対象月を入力してください。", "warn");
       return;
     }
 
     const workplaceMasterId = refs.payrollWorkplaceMaster.value;
     if (!workplaceMasterId || (!getMasterById(workplaceMasterId) && !isTimeeMasterOptionId(workplaceMasterId))) {
-      alert("勤務先マスタを選択してください。");
+      showToast("勤務先マスタを選択してください。", "warn");
       return;
     }
 
     const amount = toNonNegativeNumber(refs.payrollAmount.value, 0);
     if (amount <= 0) {
-      alert("支払実績額を入力してください。");
+      showToast("支払実績額を入力してください。", "warn");
       return;
     }
 
@@ -1653,16 +1803,16 @@
     renderDayShiftList();
     renderSummary();
     queueAutoSync("給与実績保存");
-    alert("給与実績を保存しました。関連シフトを自動で支払済みに反映しました。");
+    showToast("給与実績を保存しました。関連シフトを自動で支払済みに反映しました。");
   }
 
-  function deletePayrollRecord(recordId) {
+  async function deletePayrollRecord(recordId) {
     const normalizedRecords = normalizePayrollRecords(state.payrolls);
     const target = normalizedRecords.find((item) => item.id === recordId);
     if (!target) {
       return;
     }
-    if (!window.confirm("この給与実績を削除しますか？")) {
+    if (!await showConfirm("この給与実績を削除しますか？")) {
       return;
     }
     state.payrolls = normalizedRecords.filter((item) => item.id !== recordId);
@@ -2144,7 +2294,7 @@
       payload = buildBulkShiftPayloadFromForm();
     } catch (error) {
       setBulkStatus(error.message);
-      alert(error.message);
+      showToast(error.message, "error");
       return;
     }
 
@@ -2187,7 +2337,7 @@
 
     const message = `対象 ${candidates}件 / 追加 ${created}件 / スキップ ${skipped}件`;
     setBulkStatus(message);
-    alert(`一括登録が完了しました。\n${message}`);
+    showToast(`一括登録が完了しました。${message ? " " + message : ""}`, "success", 5000);
   }
 
   function buildBulkShiftPayloadFromForm() {
@@ -2359,7 +2509,7 @@
   function saveCurrentShiftAsMaster() {
     const name = refs.workplace.value.trim();
     if (!name) {
-      alert("勤務先を入力してから保存してください。");
+      showToast("勤務先を入力してから保存してください。", "warn");
       return;
     }
     const effectiveDate = selectedDate || toDateKey(new Date());
@@ -2410,7 +2560,7 @@
     persistUiState();
 
     queueAutoSync("勤務先マスタ保存");
-    alert(existing ? "勤務先マスタを更新しました。" : "勤務先マスタに保存しました。");
+    showToast(existing ? "勤務先マスタを更新しました。" : "勤務先マスタに保存しました。");
   }
 
   function saveMasterFromForm() {
@@ -2421,7 +2571,7 @@
     const taxRate = clamp(toNonNegativeNumber(refs.masterTaxRate.value, state.settings.taxRate), 0, 100);
 
     if (!name) {
-      alert("勤務先名を入力してください。");
+      showToast("勤務先名を入力してください。", "warn");
       return;
     }
 
@@ -2472,13 +2622,13 @@
     persistUiState();
 
     queueAutoSync("勤務先マスタ保存");
-    alert("勤務先マスタを保存しました。");
+    showToast("勤務先マスタを保存しました。");
   }
 
   function saveMasterRateFromForm() {
     const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
     if (!master) {
-      alert("先に勤務先マスタを保存してください。");
+      showToast("先に勤務先マスタを保存してください。", "warn");
       return;
     }
 
@@ -2488,11 +2638,11 @@
     const transport = toNonNegativeNumber(refs.masterRateTransport.value, 0);
 
     if (!isValidDateKey(effectiveFrom)) {
-      alert("適用開始日を入力してください。");
+      showToast("適用開始日を入力してください。", "warn");
       return;
     }
     if (hourlyRate <= 0) {
-      alert("時給を入力してください。");
+      showToast("時給を入力してください。", "warn");
       return;
     }
 
@@ -2526,10 +2676,10 @@
     renderSummary();
     renderBulkForm();
     queueAutoSync("給与履歴保存");
-    alert("給与履歴を保存しました。");
+    showToast("給与履歴を保存しました。");
   }
 
-  function deleteSelectedMasterRate() {
+  async function deleteSelectedMasterRate() {
     const master = getMasterById(refs.masterId.value.trim() || selectedMasterId);
     if (!master) {
       return;
@@ -2542,7 +2692,7 @@
 
     const rates = getMasterPayRates(master);
     if (rates.length <= 1) {
-      alert("給与履歴は最低1件必要です。");
+      showToast("給与履歴は最低1件必要です。", "warn");
       return;
     }
 
@@ -2551,7 +2701,7 @@
       return;
     }
 
-    if (!window.confirm(`適用開始日 ${target.effectiveFrom} の履歴を削除しますか？`)) {
+    if (!await showConfirm(`適用開始日 ${target.effectiveFrom} の履歴を削除しますか？`)) {
       return;
     }
 
@@ -2579,7 +2729,7 @@
     queueAutoSync("給与履歴削除");
   }
 
-  function deleteSelectedMaster() {
+  async function deleteSelectedMaster() {
     const masterId = refs.masterId.value.trim() || selectedMasterId;
     if (!masterId) {
       return;
@@ -2590,7 +2740,7 @@
       return;
     }
 
-    if (!window.confirm(`勤務先マスタ「${target.name}」を削除しますか？`)) {
+    if (!await showConfirm(`勤務先マスタ「${target.name}」を削除しますか？`)) {
       return;
     }
 
@@ -2757,13 +2907,13 @@
       persistState();
       setSyncStatus(`クラウドに保存しました (${formatDateTime(state.sync.lastSyncedAt)})`);
       if (!silent) {
-        alert("クラウド同期が完了しました。");
+        showToast("クラウド同期が完了しました。");
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "クラウド同期に失敗しました。";
       setSyncStatus(message);
       if (!silent) {
-        alert(message);
+        showToast(message, "error");
       }
     }
   }
@@ -2803,7 +2953,7 @@
       const remoteUpdatedAt = parsed && parsed.updatedAt ? parsed.updatedAt : data.updated_at || "不明";
 
       if (mode === "overwrite") {
-        const ok = skipConfirm ? true : window.confirm(`クラウドのデータ (${remoteUpdatedAt}) で上書きしますか？`);
+        const ok = skipConfirm ? true : await showConfirm(`クラウドのデータ (${remoteUpdatedAt}) で上書きしますか？`);
         if (!ok) {
           setSyncStatus("取得をキャンセルしました。");
           return false;
@@ -2831,14 +2981,14 @@
       renderAll();
       setSyncStatus(`クラウドから取得しました (${formatDateTime(state.sync.lastSyncedAt)})`);
       if (!silent) {
-        alert(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。");
+        showToast(mode === "overwrite" ? "クラウドデータを取り込みました。" : "差分マージで取り込みました。");
       }
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "クラウド取得に失敗しました。";
       setSyncStatus(message);
       if (!silent) {
-        alert(message);
+        showToast(message, "error");
       }
       return false;
     }
@@ -2970,7 +3120,7 @@
       const incomingPayrolls = normalizePayrollRecords(rawData.payrolls);
       const incomingSettings = isObject(rawData.settings) ? rawData.settings : {};
 
-      if (!window.confirm("現在データをバックアップ内容で上書きしますか？")) {
+      if (!await showConfirm("現在データをバックアップ内容で上書きしますか？")) {
         setSyncStatus("バックアップ読み込みをキャンセルしました。");
         return;
       }
@@ -2991,11 +3141,11 @@
       renderAll();
 
       setSyncStatus("バックアップを読み込みました。");
-      alert("バックアップを読み込みました。");
+      showToast("バックアップを読み込みました。");
     } catch (error) {
       const message = error instanceof Error ? error.message : "バックアップ読み込みに失敗しました。";
       setSyncStatus(message);
-      alert(message);
+      showToast(message, "error");
     } finally {
       refs.backupFileInput.value = "";
     }
